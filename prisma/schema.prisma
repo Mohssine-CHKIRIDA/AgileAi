@@ -1,123 +1,679 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================================
+// AgileAI — Prisma Schema
+// 1 PostgreSQL database, 2 schemas:
+//
+//  business  →  identity & structure
+//               User, Project, TeamMember, MemberSkill, Integration
+//               Written by humans. Read by agents.
+//
+//  agents    →  everything AI produces (validated by humans)
+//               Task, SprintPlan, Assignment, WorkflowState,
+//               AutomationRule + all agent infra tables
+//               Written by agents after human validation.
+//
+// Cross-schema references: agents tables store IDs that point
+// to business tables, but Prisma does not enforce FK across
+// schemas — integrity is handled at the application layer.
+//
+// Requirements:
+//   PostgreSQL 15+
+//   Prisma 5.0+  (multiSchema preview)
+//
+// One-time DB setup (run once before prisma migrate dev):
+//   CREATE SCHEMA business;
+//   CREATE SCHEMA agents;
+// ============================================================
 
 generator client {
-    provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
-    provider     = "postgresql"
-    url          = env("DATABASE_URL")
-    relationMode = "prisma"
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+  schemas      = ["business", "agents"]
 }
 
+// ============================================================
+// BUSINESS SCHEMA — identity & structure, written by humans
+// ============================================================
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  PROJECT_MANAGER
+  DEVELOPER
+  VIEWER
+
+  @@schema("business")
+}
+
+enum IntegrationProvider {
+  GITHUB
+  GITLAB
+  SLACK
+  DISCORD
+
+  @@schema("business")
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+
+  @@schema("business")
+}
+
+// Source of truth for all user identity.
+// Agents reference users by userId (String) — no FK enforced cross-schema.
+model User {
+  id        String    @id
+  name      String
+  email     String    @unique
+  avatar    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  memberships TeamMember[]
+  skills      MemberSkill[]
+
+  @@schema("business")
+}
+
+// Top-level container. All agents are scoped to a project.
 model Project {
-    id              String    @id @default(uuid())
-    key             String    @unique
-    name            String
-    defaultAssignee String?
-    imageUrl        String?
-    createdAt       DateTime  @default(now())
-    updatedAt       DateTime? @updatedAt
-    deletedAt       DateTime?
-    members         Member[]
+  id              String    @id @default(uuid())
+  key             String    @unique
+  name            String
+  description     String?   @db.Text
+  imageUrl        String?
+  defaultAssignee String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime? @updatedAt
+  deletedAt       DateTime?
+
+  members      TeamMember[]
+  integrations Integration[]
+
+  @@schema("business")
 }
 
-model Member {
-    id        String  @id
-    projectId String
-    project   Project @relation(fields: [projectId], references: [id])
+// Membership of a User in a Project with a role.
+// Assignment Agent reads role + skills to decide who gets what.
+model TeamMember {
+  id        String     @id @default(uuid())
+  userId    String
+  projectId String
+  role      MemberRole @default(DEVELOPER)
+  joinedAt  DateTime   @default(now())
 
-    @@index([projectId])
+  user    User    @relation(fields: [userId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@schema("business")
 }
 
-enum IssueType {
-    BUG
-    TASK
-    SUBTASK
-    STORY
-    EPIC
+// Written by users in profile settings.
+// Read by Assignment Agent to match tasks to the right person.
+model MemberSkill {
+  id        String   @id @default(uuid())
+  userId    String
+  skill     String
+  level     Int      @default(3)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, skill])
+  @@index([userId])
+  @@schema("business")
 }
 
-enum IssueStatus {
-    TODO
-    IN_PROGRESS
-    DONE
+// One row per external tool connected to a project.
+// Automation & Integration Agent reads this for webhook routing.
+model Integration {
+  id            String              @id @default(uuid())
+  projectId     String
+  provider      IntegrationProvider
+  status        IntegrationStatus   @default(ACTIVE)
+  externalId    String?
+  webhookSecret String?
+  config        Json                @default("{}")
+  lastSyncAt    DateTime?
+  errorMsg      String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, provider])
+  @@index([projectId])
+  @@schema("business")
 }
 
-model Issue {
-    id             String      @id @default(uuid())
-    key            String
-    name           String
-    description    String?     @db.Text()
-    status         IssueStatus @default(TODO)
-    type           IssueType   @default(TASK)
-    sprintPosition Float
-    boardPosition  Float       @default(-1)
-    reporterId     String      @default("1")
-    assigneeId     String?
-    parentId       String?
-    sprintId       String?
-    isDeleted      Boolean     @default(false)
-    createdAt      DateTime    @default(now())
-    updatedAt      DateTime    @updatedAt
-    deletedAt      DateTime?
-    sprintColor    String?
-    creatorId      String
-    comments       Comment[]
-    Sprint         Sprint?     @relation(fields: [sprintId], references: [id])
+// ============================================================
+// AGENTS SCHEMA — everything AI produces, validated by humans
+// ============================================================
 
-    @@unique([key, creatorId])
-    @@index([sprintId])
+enum ValidationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FAILED
+
+  @@schema("agents")
 }
 
-enum SprintStatus {
-    ACTIVE
-    PENDING
-    CLOSED
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+
+  @@schema("agents")
 }
 
-enum Duration {
-    ONE_WEEK
-    TWO_WEEKS
-    THREE_WEEKS
-    FOUR_WEEKS
-    CUSTOM
+enum TaskType {
+  BUG
+  TASK
+  SUBTASK
+  STORY
+  EPIC
+
+  @@schema("agents")
 }
 
-model Sprint {
-    id          String       @id @default(uuid())
-    name        String
-    description String       @db.Text()
-    duration    String?
-    startDate   DateTime?
-    endDate     DateTime?
-    creatorId   String
-    createdAt   DateTime     @default(now())
-    updatedAt   DateTime?    @updatedAt
-    deletedAt   DateTime?
-    status      SprintStatus @default(PENDING)
-    issues      Issue[]
+enum Priority {
+  P1_CRITICAL
+  P2_HIGH
+  P3_MEDIUM
+  P4_LOW
+
+  @@schema("agents")
+}
+
+enum SprintPlanStatus {
+  DRAFT
+  VALIDATED
+  ACTIVE
+  CLOSED
+
+  @@schema("agents")
+}
+
+enum AutomationTrigger {
+  WEBHOOK_PR_MERGED
+  WEBHOOK_COMMIT_PUSHED
+  WEBHOOK_CI_PASSED
+  WEBHOOK_CI_FAILED
+  ISSUE_STATUS_CHANGED
+  ISSUE_CREATED
+  SPRINT_STARTED
+  SPRINT_CLOSED
+  SCHEDULE
+  AGENT_EVENT
+
+  @@schema("agents")
+}
+
+enum AutomationAction {
+  MOVE_ISSUE
+  ASSIGN_ISSUE
+  CREATE_ISSUE
+  ADD_LABEL
+  CLOSE_SPRINT
+  SEND_NOTIFICATION
+  POST_SLACK_MESSAGE
+  TRIGGER_AGENT
+
+  @@schema("agents")
+}
+
+// ── Shared infra — used by all agents ─────────────────────
+
+model AgentSession {
+  id          String   @id @default(uuid())
+  agentName   String
+  projectId   String
+  requestedBy String
+  triggeredBy String   @default("user")
+  input       String   @db.Text
+  output      String?  @db.Text
+  toolsCalled Json     @default("[]")
+  durationMs  Int?
+  tokenCount  Int?
+  status      String   @default("completed")
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([agentName])
+  @@schema("agents")
+}
+
+model ValidationRequest {
+  id          String           @id @default(uuid())
+  agentName   String
+  action      String
+  status      ValidationStatus @default(PENDING)
+  projectId   String
+  requestedBy String
+  sessionId   String?
+
+  payload   Json
+  warnings  Json    @default("[]")
+  rawOutput String? @db.Text
+
+  decidedBy    String?
+  decidedAt    DateTime?
+  decisionNote String?   @db.Text
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([projectId, status])
+  @@schema("agents")
+}
+
+model AgentContext {
+  id          String   @id @default(uuid())
+  projectId   String
+  agentName   String
+  contextData Json
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, agentName])
+  @@schema("agents")
+}
+
+model EventLog {
+  id         String   @id @default(uuid())
+  projectId  String?
+  entityType String
+  entityId   String
+  event      String
+  actorId    String?
+  actorType  String   @default("user")
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+  @@index([entityType, entityId])
+  @@schema("agents")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  link      String?
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@schema("agents")
+}
+
+// ── Task Agent ─────────────────────────────────────────────
+
+model Task {
+  id        String @id @default(uuid())
+  projectId String
+
+  sprintPlanId String?
+  sprintPlan   SprintPlan? @relation(fields: [sprintPlanId], references: [id])
+
+  assigneeId String?
+  reviewerId String?
+
+  parentTaskId String?
+  validationId String?
+
+  key         String
+  title       String
+  description String? @db.Text
+
+  acceptanceCriteria Json @default("[]")
+
+  status   TaskStatus @default(BACKLOG)
+  type     TaskType   @default(TASK)
+  priority Priority   @default(P3_MEDIUM)
+
+  labels         String[] @default([])
+  storyPoints    Int?
+  estimatedHours Float?
+
+  isBlocked     Boolean @default(false)
+  blockedReason String?
+
+  sprintPosition Float @default(0)
+  boardPosition  Float @default(-1)
+
+  reporterId String
+  creatorId  String
+
+  aiGenerated Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  comments Comment[]
+
+  parent   Task?  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  subtasks Task[] @relation("TaskSubtasks")
+
+  @@unique([key, projectId])
+  @@index([projectId])
+  @@index([sprintPlanId])
+  @@schema("agents")
 }
 
 model Comment {
-    id        String    @id @default(uuid())
-    content   String    @db.Text()
-    authorId  String
-    createdAt DateTime  @default(now())
-    updatedAt DateTime  @updatedAt
-    deletedAt DateTime?
-    isEdited  Boolean   @default(false)
-    issueId   String
-    logId     String?
-    Issue     Issue?    @relation(fields: [issueId], references: [id])
+  id        String    @id @default(uuid())
+  taskId    String
+  authorId  String
+  content   String    @db.Text
+  isEdited  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-    @@index([issueId])
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+  @@schema("agents")
 }
 
-model DefaultUser {
-    id     String  @id
-    name   String
-    email  String
-    avatar String?
+model DuplicateDetection {
+  id              String   @id @default(uuid())
+  projectId       String
+  newTaskTitle    String
+  similarTaskId   String
+  similarityScore Float
+  reason          String?
+  dismissed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model IssueSplitSuggestion {
+  id             String   @id @default(uuid())
+  originalTaskId String
+  projectId      String
+  validationId   String?
+  subtasks       Json
+  reason         String?
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+// ── Assignment Agent ───────────────────────────────────────
+
+model Assignment {
+  id           String  @id @default(uuid())
+  taskId       String
+  projectId    String
+  validationId String?
+
+  assigneeId       String
+  reviewerId       String?
+  assigneeReason   String? @db.Text
+  reviewerReason   String? @db.Text
+  workloadSnapshot Json?
+
+  applied   Boolean   @default(false)
+  appliedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([taskId])
+  @@index([projectId])
+  @@schema("agents")
+}
+
+// ── Planning Agent ─────────────────────────────────────────
+
+model SprintPlan {
+  id           String  @id @default(uuid())
+  projectId    String
+  validationId String?
+
+  name      String
+  goal      String           @db.Text
+  startDate DateTime?
+  endDate   DateTime?
+  status    SprintPlanStatus @default(DRAFT)
+
+  totalCapacityPoints Int @default(0)
+  plannedPoints       Int @default(0)
+  bufferPoints        Int @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tasks          Task[]
+  velocityRecord VelocityRecord?
+  riskAssessment RiskAssessment?
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model VelocityRecord {
+  id              String    @id @default(uuid())
+  projectId       String
+  sprintPlanId    String    @unique
+  sprintName      String
+  plannedPoints   Int       @default(0)
+  completedPoints Int       @default(0)
+  memberCount     Int       @default(0)
+  completionRate  Float     @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  createdAt       DateTime  @default(now())
+
+  sprintPlan SprintPlan @relation(fields: [sprintPlanId], references: [id])
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model RiskAssessment {
+  id           String   @id @default(uuid())
+  projectId    String
+  sprintPlanId String   @unique
+  score        Int
+  level        String
+  factors      Json
+  summary      String   @db.Text
+  mitigations  Json     @default("[]")
+  createdAt    DateTime @default(now())
+
+  sprintPlan SprintPlan @relation(fields: [sprintPlanId], references: [id])
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+// ── Workflow Agent ─────────────────────────────────────────
+
+model WorkflowTransition {
+  id          String   @id @default(uuid())
+  taskId      String
+  projectId   String
+  fromStatus  String
+  toStatus    String
+  triggeredBy String
+  triggerRef  String?
+  reason      String?
+  sessionId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([taskId])
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model BlockedTask {
+  id           String    @id @default(uuid())
+  taskId       String
+  projectId    String
+  sprintPlanId String?
+  reason       String    @db.Text
+  blockedSince DateTime
+  resolvedAt   DateTime?
+  resolvedBy   String?
+  notified     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([taskId])
+  @@schema("agents")
+}
+
+model BottleneckRecord {
+  id              String    @id @default(uuid())
+  projectId       String
+  sprintPlanId    String?
+  columnStatus    String
+  taskCount       Int
+  wipLimit        Int?
+  avgDaysInColumn Float?
+  severity        String
+  suggestion      String?   @db.Text
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model WorkflowSuggestion {
+  id          String    @id @default(uuid())
+  projectId   String
+  type        String
+  title       String
+  description String    @db.Text
+  impact      String
+  dismissed   Boolean   @default(false)
+  appliedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+// ── Automation & Integration Agent ────────────────────────
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  projectId   String
+  provider    String
+  eventType   String
+  payload     Json
+  signature   String?
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  sessionId   String?
+  errorMsg    String?
+  retryCount  Int       @default(0)
+  receivedAt  DateTime  @default(now())
+
+  @@index([projectId, processed])
+  @@schema("agents")
+}
+
+model AutomationRule {
+  id            String            @id @default(uuid())
+  projectId     String
+  validationId  String?
+  name          String
+  description   String?
+  enabled       Boolean           @default(true)
+  triggerType   AutomationTrigger
+  triggerConfig Json
+  actionType    AutomationAction
+  actionConfig  Json
+  aiGenerated   Boolean           @default(false)
+  createdBy     String
+  lastFiredAt   DateTime?
+  fireCount     Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  executions AutomationExecution[]
+
+  @@index([projectId, enabled])
+  @@schema("agents")
+}
+
+model AutomationExecution {
+  id             String   @id @default(uuid())
+  ruleId         String
+  projectId      String
+  triggerEventId String?
+  sessionId      String?
+  success        Boolean
+  result         Json?
+  errorMsg       String?
+  durationMs     Int?
+  createdAt      DateTime @default(now())
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId])
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model AutomationSuggestion {
+  id              String   @id @default(uuid())
+  projectId       String
+  suggestedRule   Json
+  rationale       String   @db.Text
+  patternObserved Json?
+  validationId    String?
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+
+  @@index([projectId])
+  @@schema("agents")
+}
+
+model PullRequestLink {
+  id           String    @id @default(uuid())
+  projectId    String
+  taskId       String
+  provider     String
+  prUrl        String
+  prNumber     Int
+  prTitle      String?
+  repoFullName String
+  status       String    @default("open")
+  mergedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([provider, repoFullName, prNumber])
+  @@index([taskId])
+  @@index([projectId])
+  @@schema("agents")
 }
