@@ -1,26 +1,17 @@
+/**
+ * LOCAL DEV version — auth via X-Dev-User-Id header.
+ * User data comes from prisma.user (business schema), not Clerk.
+ */
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
-import { MemberRole } from "@prisma/client";
-import { clerkClient } from "@clerk/nextjs";
-import { filterUserForClient } from "@/utils/helpers";
-import { getAuth } from "@clerk/nextjs/server";
+import { MemberRole, type User } from "@prisma/client";
+import { getDevAuth } from "@/server/dev-auth";
 import { z } from "zod";
 
-// The shape returned to the client: Clerk user data merged with role info
-export type ProjectMember = ReturnType<typeof filterUserForClient> & {
-  role: MemberRole;
-  joinedAt: Date;
-};
+export type ProjectMember = User & { role: MemberRole; joinedAt: Date };
+export type GetProjectMembersResponse = { members: ProjectMember[] };
 
-export type GetProjectMembersResponse = {
-  members: ProjectMember[];
-};
-
-type MembersParams = {
-  params: {
-    project_id: string;
-  };
-};
+type MembersParams = { params: { project_id: string } };
 
 const postMemberBodyValidator = z.object({
   userId: z.string(),
@@ -29,32 +20,28 @@ const postMemberBodyValidator = z.object({
 
 export type PostMemberBody = z.infer<typeof postMemberBodyValidator>;
 
+/** Helper — verify caller is a member of the project */
+async function assertMember(userId: string, projectId: string) {
+  return prisma.teamMember.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+  });
+}
+
 /**
- * GET /api/project/[project_id]/members
- *
- * Returns all active members of a project with their Clerk profile data.
- * Caller must be a member of the project.
+ * GET /api/project/:project_id/members
+ * Header: X-Dev-User-Id: local-user-1
  */
 export async function GET(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getAuth(req);
-  if (!userId) return new Response("Unauthenticated request", { status: 403 });
+  const { userId } = getDevAuth(req);
+  if (!userId) {
+    return new Response("Missing X-Dev-User-Id header", { status: 403 });
+  }
 
   const { project_id } = params;
 
-  // Verify the caller belongs to this project
-  const callerMembership = await prisma.teamMember.findUnique({
-    where: {
-      userId_projectId: {
-        userId,
-        projectId: project_id,
-      },
-    },
-  });
-
+  const callerMembership = await assertMember(userId, project_id);
   if (!callerMembership) {
-    return new Response("Forbidden: not a member of this project", {
-      status: 403,
-    });
+    return new Response("Forbidden: not a member of this project", { status: 403 });
   }
 
   const teamMembers = await prisma.teamMember.findMany({
@@ -66,100 +53,70 @@ export async function GET(req: NextRequest, { params }: MembersParams) {
     return NextResponse.json<GetProjectMembersResponse>({ members: [] });
   }
 
-  // USE THIS IF RUNNING LOCALLY -----------------------
-  // const dbUsers = await prisma.user.findMany({
-  //   where: { id: { in: teamMembers.map((m) => m.userId) } },
-  // });
-  // const members: ProjectMember[] = teamMembers.map((tm) => {
-  //   const user = dbUsers.find((u) => u.id === tm.userId)!;
-  //   return { ...filterUserForClient(user), role: tm.role, joinedAt: tm.joinedAt };
-  // });
-  // --------------------------------------------------
-
-  // COMMENT THIS IF RUNNING LOCALLY ------------------
-  const clerkUsers = (
-    await clerkClient.users.getUserList({
-      userId: teamMembers.map((m) => m.userId),
-      limit: 100,
-    })
-  ).map(filterUserForClient);
+  const users = await prisma.user.findMany({
+    where: { id: { in: teamMembers.map((m) => m.userId) } },
+  });
 
   const members: ProjectMember[] = teamMembers.flatMap((tm) => {
-    const clerkUser = clerkUsers.find((u) => u.id === tm.userId);
-    if (!clerkUser) return [];
-    return [{ ...clerkUser, role: tm.role, joinedAt: tm.joinedAt }];
+    const user = users.find((u) => u.id === tm.userId);
+    if (!user) return [];
+    return [{ ...user, role: tm.role, joinedAt: tm.joinedAt }];
   });
-  // --------------------------------------------------
 
   return NextResponse.json<GetProjectMembersResponse>({ members });
 }
 
 /**
- * POST /api/project/[project_id]/members
- *
- * Adds a new member to the project.
- * Only OWNER or ADMIN can invite others.
+ * POST /api/project/:project_id/members
+ * Header: X-Dev-User-Id: local-user-1
+ * Body: { userId, role? }
  */
 export async function POST(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getAuth(req);
-  if (!userId) return new Response("Unauthenticated request", { status: 403 });
+  const { userId } = getDevAuth(req);
+  if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
 
   const { project_id } = params;
 
-  // Check caller permissions
-  const callerMembership = await prisma.teamMember.findUnique({
-    where: {
-      userId_projectId: {
-        userId,
-        projectId: project_id,
-      },
-    },
-  });
-
+  const callerMembership = await assertMember(userId, project_id);
   if (!callerMembership) {
-    return new Response("Forbidden: not a member of this project", {
-      status: 403,
-    });
+    return new Response("Forbidden: not a member of this project", { status: 403 });
   }
-
   if (
     callerMembership.role !== MemberRole.OWNER &&
     callerMembership.role !== MemberRole.ADMIN
   ) {
-    return new Response("Forbidden: only OWNER or ADMIN can add members", {
-      status: 403,
-    });
+    return new Response("Forbidden: only OWNER or ADMIN can add members", { status: 403 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const body = await req.json();
   const validated = postMemberBodyValidator.safeParse(body);
-
   if (!validated.success) {
-    const message =
-      "Invalid body. " + (validated.error.errors[0]?.message ?? "");
-    return new Response(message, { status: 400 });
+    return new Response(
+      "Invalid body. " + (validated.error.errors[0]?.message ?? ""),
+      { status: 400 }
+    );
   }
 
   const { data: valid } = validated;
 
-  // Prevent duplicate membership
-  const existingMembership = await prisma.teamMember.findUnique({
-    where: {
-      userId_projectId: {
-        userId: valid.userId,
-        projectId: project_id,
-      },
+  const existingMembership = await assertMember(valid.userId, project_id);
+  if (existingMembership) {
+    return new Response("User is already a member of this project", { status: 409 });
+  }
+
+  // Auto-create the target user in DB if they don't exist yet (handy for dev)
+  await prisma.user.upsert({
+    where: { id: valid.userId },
+    update: {},
+    create: {
+      id: valid.userId,
+      name: valid.userId,
+      email: `${valid.userId}@localhost.dev`,
     },
   });
-
-  if (existingMembership) {
-    return new Response("User is already a member of this project", {
-      status: 409,
-    });
-  }
 
   const member = await prisma.teamMember.create({
     data: {
@@ -173,36 +130,23 @@ export async function POST(req: NextRequest, { params }: MembersParams) {
 }
 
 /**
- * DELETE /api/project/[project_id]/members
- *
- * Removes a member from the project.
- * Only OWNER or ADMIN can remove others; any member can remove themselves.
+ * DELETE /api/project/:project_id/members?userId=X
+ * Header: X-Dev-User-Id: local-user-1
  */
 export async function DELETE(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getAuth(req);
-  if (!userId) return new Response("Unauthenticated request", { status: 403 });
+  const { userId } = getDevAuth(req);
+  if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
 
   const { project_id } = params;
-
   const { searchParams } = new URL(req.url);
   const targetUserId = searchParams.get("userId");
+  if (!targetUserId) return new Response("Missing 'userId' query parameter", { status: 400 });
 
-  if (!targetUserId) {
-    return new Response("Missing 'userId' query parameter", { status: 400 });
-  }
-
-  const callerMembership = await prisma.teamMember.findUnique({
-    where: {
-      userId_projectId: { userId, projectId: project_id },
-    },
-  });
-
+  const callerMembership = await assertMember(userId, project_id);
   if (!callerMembership) {
-    return new Response("Forbidden: not a member of this project", {
-      status: 403,
-    });
+    return new Response("Forbidden: not a member of this project", { status: 403 });
   }
 
   const isSelf = userId === targetUserId;
@@ -214,8 +158,7 @@ export async function DELETE(req: NextRequest, { params }: MembersParams) {
     return new Response("Forbidden: insufficient permissions", { status: 403 });
   }
 
-  // Cannot remove the last OWNER
-  if (targetUserId === userId && callerMembership.role === MemberRole.OWNER) {
+  if (isSelf && callerMembership.role === MemberRole.OWNER) {
     const ownerCount = await prisma.teamMember.count({
       where: { projectId: project_id, role: MemberRole.OWNER },
     });
@@ -228,9 +171,7 @@ export async function DELETE(req: NextRequest, { params }: MembersParams) {
   }
 
   await prisma.teamMember.delete({
-    where: {
-      userId_projectId: { userId: targetUserId, projectId: project_id },
-    },
+    where: { userId_projectId: { userId: targetUserId, projectId: project_id } },
   });
 
   return new Response(null, { status: 204 });

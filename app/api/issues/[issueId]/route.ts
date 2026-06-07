@@ -1,42 +1,34 @@
+/**
+ * LOCAL DEV version — auth via X-Dev-User-Id header.
+ */
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
-import {
-  IssueStatus,
-  type Issue,
-  IssueType,
-  type DefaultUser,
-} from "@prisma/client";
+import { getDevAuth } from "@/server/dev-auth";
+import { IssueStatus, type Issue, IssueType, type DefaultUser } from "@prisma/client";
 import { z } from "zod";
 import { type GetIssuesResponse } from "../route";
-import { clerkClient } from "@clerk/nextjs";
-import { filterUserForClient } from "@/utils/helpers";
-import { getAuth } from "@clerk/nextjs/server";
 
 export type GetIssueDetailsResponse = {
   issue: GetIssuesResponse["issues"][number] | null;
 };
-
 export type PostIssueResponse = { issue: Issue };
 
+type ParamsType = { params: { issueId: string } };
+
+/**
+ * GET /api/issues/:issueId
+ * Header: X-Dev-User-Id: local-user-1
+ */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { issueId: string } }
 ) {
   const { issueId } = params;
-  const issue = await prisma.issue.findUnique({
-    where: {
-      id: issueId,
-    },
-  });
+  const issue = await (prisma as any).issue.findUnique({ where: { id: issueId } });
   if (!issue?.parentId) {
     return NextResponse.json({ issue: { ...issue, parent: null } });
   }
-  const parent = await prisma.issue.findUnique({
-    where: {
-      id: issue.parentId,
-    },
-  });
-  // return NextResponse.json<GetIssueDetailsResponse>({ issue });
+  const parent = await (prisma as any).issue.findUnique({ where: { id: issue.parentId } });
   return NextResponse.json({ issue: { ...issue, parent } });
 }
 
@@ -60,44 +52,35 @@ export type PatchIssueResponse = {
   issue: Issue & { assignee: DefaultUser | null };
 };
 
-type ParamsType = {
-  params: {
-    issueId: string;
-  };
-};
-
+/**
+ * PATCH /api/issues/:issueId
+ * Header: X-Dev-User-Id: local-user-1
+ */
 export async function PATCH(req: NextRequest, { params }: ParamsType) {
-  const { userId } = getAuth(req);
-  if (!userId) return new Response("Unauthenticated request", { status: 403 });
+  const { userId } = getDevAuth(req);
+  if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
+
   const { issueId } = params;
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const body = await req.json();
   const validated = patchIssueBodyValidator.safeParse(body);
-
   if (!validated.success) {
-    // eslint-disable-next-line
-    const message = "Invalid body. " + validated.error.errors[0]?.message ?? "";
-    return new Response(message, { status: 400 });
+    return new Response(
+      "Invalid body. " + (validated.error.errors[0]?.message ?? ""),
+      { status: 400 }
+    );
   }
+
   const { data: valid } = validated;
 
-  const currentIssue = await prisma.issue.findUnique({
-    where: {
-      id: issueId,
-    },
-  });
+  const currentIssue = await (prisma as any).issue.findUnique({ where: { id: issueId } });
+  if (!currentIssue) return new Response("Issue not found", { status: 404 });
 
-  if (!currentIssue) {
-    return new Response("Issue not found", { status: 404 });
-  }
-
-  const issue = await prisma.issue.update({
-    where: {
-      id: issueId,
-    },
+  const issue = await (prisma as any).issue.update({
+    where: { id: issueId },
     data: {
       name: valid.name ?? undefined,
       description: valid.description ?? undefined,
@@ -114,40 +97,33 @@ export async function PATCH(req: NextRequest, { params }: ParamsType) {
     },
   });
 
+  // Resolve assignee from local DB
+  let assignee: DefaultUser | null = null;
   if (issue.assigneeId) {
-    const assignee = await clerkClient.users.getUser(issue.assigneeId);
-    const assigneeForClient = filterUserForClient(assignee);
-    return NextResponse.json({
-      issue: { ...issue, assignee: assigneeForClient },
-    });
+    assignee = await (prisma as any).defaultUser.findUnique({
+      where: { id: issue.assigneeId },
+    }) ?? null;
   }
 
-  // return NextResponse.json<PostIssueResponse>({ issue });
-  return NextResponse.json({
-    issue: { ...issue, assignee: null },
-  });
+  return NextResponse.json({ issue: { ...issue, assignee } });
 }
 
+/**
+ * DELETE /api/issues/:issueId  (soft-delete)
+ * Header: X-Dev-User-Id: local-user-1
+ */
 export async function DELETE(req: NextRequest, { params }: ParamsType) {
-  const { userId } = getAuth(req);
-  if (!userId) return new Response("Unauthenticated request", { status: 403 });
+  const { userId } = getDevAuth(req);
+  if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
 
   const { issueId } = params;
 
-  const issue = await prisma.issue.update({
-    where: {
-      id: issueId,
-    },
-    data: {
-      isDeleted: true,
-      boardPosition: -1,
-      sprintPosition: -1,
-      sprintId: "DELETED-SPRINT-ID",
-    },
+  const issue = await (prisma as any).issue.update({
+    where: { id: issueId },
+    data: { isDeleted: true, boardPosition: -1, sprintPosition: -1 },
   });
 
-  // return NextResponse.json<PostIssueResponse>({ issue });
   return NextResponse.json({ issue });
 }

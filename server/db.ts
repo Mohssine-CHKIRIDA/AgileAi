@@ -1,17 +1,9 @@
 import { PrismaClient } from "@prisma/client";
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { env } from "@/env.mjs";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
-
-export const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(15, "1 m"), // 15 requests per minute
-  analytics: true,
-});
 
 export const prisma =
   globalForPrisma.prisma ??
@@ -21,3 +13,11 @@ export const prisma =
   });
 
 if (env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+/**
+ * LOCAL DEV — no-op ratelimit (no Redis/Upstash needed).
+ * Swap this back to the Upstash version before deploying.
+ */
+export const ratelimit = {
+  limit: async (_identifier: string) => ({ success: true }),
+};

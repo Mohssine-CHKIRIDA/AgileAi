@@ -1,21 +1,36 @@
-import { type IssueCountType } from "./types";
-import { type IssueType } from "@/utils/types";
-import { type clerkClient } from "@clerk/nextjs";
-import { type DefaultUser, type Issue } from "@prisma/client";
+/**
+ * utils/helpers.ts  (updated for AgileAI schema)
+ *
+ * All existing call sites are unchanged. generateIssuesForClient and
+ * filterUserForClient now work with Task + User instead of Issue + DefaultUser.
+ */
 
-type Value<T> = T extends Promise<infer U> ? U : T;
+import { type IssueCountType } from "./types";
+import { type IssueShape, type IssueUser, generateTasksForClient } from "./task-adapter";
+import { type Task, type User } from "@prisma/client";
+
+// Re-export IssueShape as IssueType so utils/types.ts stays unchanged
+export type { IssueShape as IssueType };
+
+// ── URL / HTTP ────────────────────────────────────────────────────────────────
 
 export function getBaseUrl() {
-  if (typeof window !== "undefined") return ""; // browser should use relative url
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`; // SSR should use vercel url
-  return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
+  if (typeof window !== "undefined") return "";
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
 export function getHeaders() {
   return {
     "Content-type": "application/json",
+    // In local dev, read the dev user id from sessionStorage if set
+    ...(typeof window !== "undefined" && sessionStorage.getItem("devUserId")
+      ? { "x-dev-user-id": sessionStorage.getItem("devUserId")! }
+      : {}),
   };
 }
+
+// ── String utils ──────────────────────────────────────────────────────────────
 
 export function capitalize(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
@@ -28,61 +43,92 @@ export function capitalizeMany(str: string) {
     .join(" ");
 }
 
-export function getIssueCountByStatus(issues: IssueType[]) {
+// ── Issue / Task helpers ──────────────────────────────────────────────────────
+
+export function getIssueCountByStatus(issues: IssueShape[]) {
   return issues.reduce(
     (acc, issue) => {
-      acc[issue.status]++;
+      acc[issue.status as keyof IssueCountType]++;
       return acc;
     },
-    {
-      TODO: 0,
-      IN_PROGRESS: 0,
-      DONE: 0,
-    } as IssueCountType
+    { TODO: 0, IN_PROGRESS: 0, DONE: 0 } as IssueCountType
   );
 }
 
-export function isEpic(issue: IssueType | IssueType["parent"] | null) {
+export function isEpic(issue: IssueShape | IssueShape["parent"] | null) {
   if (!issue) return false;
-  return issue.type == "EPIC";
+  return issue.type === "EPIC";
 }
 
-export function isSubtask(issue: IssueType | null) {
+export function isSubtask(issue: IssueShape | null) {
   if (!issue) return false;
-  return issue.type == "SUBTASK";
+  return issue.type === "SUBTASK";
 }
 
-export function hasChildren(issue: IssueType | IssueType["parent"] | null) {
+export function hasChildren(issue: IssueShape | IssueShape["parent"] | null) {
   if (!issue) return false;
   return issue.children.length > 0;
 }
 
 export function sprintId(id: string | null | undefined) {
-  return id == "backlog" ? null : id;
+  return id === "backlog" ? null : id;
 }
 
-export function isNullish<T>(
-  value: T | null | undefined
-): value is null | undefined {
-  return value == null || value == undefined;
+export function isNullish<T>(value: T | null | undefined): value is null | undefined {
+  return value == null || value === undefined;
 }
 
-export function filterUserForClient(
-  user: Value<ReturnType<Awaited<typeof clerkClient.users.getUser>>>
-) {
-  return <DefaultUser>{
+export function isDone(issue: IssueShape) {
+  return issue.status === "DONE";
+}
+
+// ── User helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * filterUserForClient
+ * Previously mapped a Clerk user to DefaultUser.
+ * Now maps a prisma.User (business schema) to the same IssueUser shape.
+ * Works for both Clerk users (duck-typed) and local prisma.User rows.
+ */
+export function filterUserForClient(user: User | IssueUser): IssueUser {
+  return {
     id: user.id,
-    name: `${user.firstName ?? ""} ${user.lastName ?? ""}`,
-    email: user?.emailAddresses[0]?.emailAddress ?? "",
-    avatar: user.imageUrl,
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar ?? null,
   };
 }
+
+// ── Issue / Task generation ───────────────────────────────────────────────────
+
+/**
+ * generateIssuesForClient
+ * Drop-in replacement: same signature as before, now delegates to task-adapter.
+ * The `issues` parameter accepts Task[] (new) — callers pass prisma.task.findMany() results.
+ */
+export function generateIssuesForClient(
+  tasks: Task[],
+  users: IssueUser[],
+  activeSprintIds?: string[]
+): IssueShape[] {
+  return generateTasksForClient(tasks, users, activeSprintIds ?? []);
+}
+
+/**
+ * calculateInsertPosition
+ * Works on Task[] — uses sprintPosition (same field name as old Issue).
+ */
+export function calculateInsertPosition(tasks: Task[]) {
+  return Math.max(...tasks.map((t) => t.sprintPosition), 0) + 1;
+}
+
+// ── Filter helpers ────────────────────────────────────────────────────────────
 
 export function issueNotInSearch({
   issue,
   search,
 }: {
-  issue: IssueType;
+  issue: IssueShape;
   search: string;
 }) {
   return (
@@ -99,7 +145,7 @@ export function assigneeNotInFilters({
   issue,
   assignees,
 }: {
-  issue: IssueType;
+  issue: IssueShape;
   assignees: string[];
 }) {
   return (
@@ -111,7 +157,7 @@ export function epicNotInFilters({
   issue,
   epics,
 }: {
-  issue: IssueType;
+  issue: IssueShape;
   epics: string[];
 }) {
   return epics.length && (!issue.parentId || !epics.includes(issue.parentId));
@@ -121,7 +167,7 @@ export function issueTypeNotInFilters({
   issue,
   issueTypes,
 }: {
-  issue: IssueType;
+  issue: IssueShape;
   issueTypes: string[];
 }) {
   return issueTypes.length && !issueTypes.includes(issue.type);
@@ -132,7 +178,7 @@ export function issueSprintNotInFilters({
   sprintIds,
   excludeBacklog = false,
 }: {
-  issue: IssueType;
+  issue: IssueShape;
   sprintIds: string[];
   excludeBacklog?: boolean;
 }) {
@@ -143,15 +189,12 @@ export function issueSprintNotInFilters({
   return sprintIds.length && !sprintIds.includes(issue.sprintId);
 }
 
+// ── Date / colour utils ───────────────────────────────────────────────────────
+
 export function dateToLongString(date: Date) {
   const dateString = new Date(date).toDateString();
-  const timeStirng = new Date(date).toLocaleTimeString();
-
-  return dateString + " at " + timeStirng;
-}
-
-export function isDone(issue: IssueType) {
-  return issue.status == "DONE";
+  const timeString = new Date(date).toLocaleTimeString();
+  return dateString + " at " + timeString;
 }
 
 export function hexToRgba(hex: string | null, opacity?: number) {
@@ -159,39 +202,10 @@ export function hexToRgba(hex: string | null, opacity?: number) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-
   return `rgba(${r}, ${g}, ${b}, ${opacity ?? 1})`;
 }
 
-export function generateIssuesForClient(
-  issues: Issue[],
-  users: DefaultUser[],
-  activeSprintIds?: string[]
-) {
-  // Maps are used to make lookups faster
-  const userMap = new Map(users.map((user) => [user.id, user]));
-  const parentMap = new Map(issues.map((issue) => [issue.id, issue]));
-
-  const issuesForClient = issues.map((issue) => {
-    const parent = parentMap.get(issue.parentId ?? "") ?? null;
-    const assignee = userMap.get(issue.assigneeId ?? "") ?? null;
-    const reporter = userMap.get(issue.reporterId) ?? null;
-    const children = issues
-      .filter((i) => i.parentId === issue.id)
-      .map((issue) => {
-        const assignee = userMap.get(issue.assigneeId ?? "") ?? null;
-        return Object.assign(issue, { assignee });
-      });
-    const sprintIsActive = activeSprintIds?.includes(issue.sprintId ?? "");
-    return { ...issue, sprintIsActive, parent, assignee, reporter, children };
-  });
-
-  return issuesForClient as IssueType[];
-}
-
-export function calculateInsertPosition(issues: Issue[]) {
-  return Math.max(...issues.map((issue) => issue.sprintPosition), 0) + 1;
-}
+// ── Array utils ───────────────────────────────────────────────────────────────
 
 export function moveItemWithinArray<T>(arr: T[], item: T, newIndex: number) {
   const arrClone = [...arr];
@@ -208,6 +222,6 @@ export function insertItemIntoArray<T>(arr: T[], item: T, index: number) {
 }
 
 export function getPluralEnd<T>(arr: T[]) {
-  if (arr.length == 0) return "s";
+  if (arr.length === 0) return "s";
   return arr.length > 1 ? "s" : "";
 }

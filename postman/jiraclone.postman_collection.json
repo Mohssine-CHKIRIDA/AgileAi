@@ -1,0 +1,164 @@
+{
+  "info": {
+    "name": "JiraClone API",
+    "_postman_id": "jiraclone-api-collection",
+    "description": "Collection of API requests for local testing (http://localhost:3000)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "cookie", "value": "__session=; __clerk_db_jwt=; csrftoken=; __client_uat=" },
+    { "key": "project_id", "value": "<project-id>" },
+    { "key": "issueId", "value": "<issue-id>" },
+    { "key": "commentId", "value": "<comment-id>" },
+    { "key": "sprint_id", "value": "<sprint-id>" }
+  ],
+  "item": [
+    {
+      "name": "Get Project",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/api/project" }
+      }
+    },
+    {
+      "name": "Get Project Members",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/project/{{project_id}}/members" }
+      }
+    },
+    {
+      "name": "Get Issues",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/issues" }
+      }
+    },
+    {
+      "name": "Create Issue",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test issue\",\n  \"type\": \"BUG\",\n  \"sprintId\": null,\n  \"reporterId\": null,\n  \"parentId\": null,\n  \"sprintColor\": null\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/issues" }
+      }
+    },
+    {
+      "name": "Get Issue Details",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}" }
+      }
+    },
+    {
+      "name": "Update Issue",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Updated issue name\",\n  \"status\": \"TODO\",\n  \"type\": \"BUG\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}" }
+      }
+    },
+    {
+      "name": "Delete Issue",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}" }
+      }
+    },
+    {
+      "name": "Get Issue Comments",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}/comments" }
+      }
+    },
+    {
+      "name": "Post Issue Comment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Test comment\",\n  \"authorId\": \"user_3EmXhH39wZuEY4TMC2w8kaSWTvB\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}/comments" }
+      }
+    },
+    {
+      "name": "Patch Comment",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"Edited comment\"\n}" },
+        "url": { "raw": "{{baseUrl}}/api/issues/{{issueId}}/comments/{{commentId}}" }
+      }
+    },
+    {
+      "name": "Get Sprints",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/sprints" }
+      }
+    },
+    {
+      "name": "Create Sprint",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/sprints" }
+      }
+    },
+    {
+      "name": "Patch Sprint",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Cookie", "value": "{{cookie}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sprint 1\",\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/sprints/{{sprint_id}}" }
+      }
+    },
+    {
+      "name": "Delete Sprint",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Cookie", "value": "{{cookie}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/sprints/{{sprint_id}}" }
+      }
+    }
+  ]
+}

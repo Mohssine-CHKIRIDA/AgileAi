@@ -4,12 +4,10 @@
 //
 //  business  →  identity & structure
 //               User, Project, TeamMember, MemberSkill, Integration
-//               Written by humans. Read by agents.
 //
 //  agents    →  everything AI produces (validated by humans)
 //               Task, SprintPlan, Assignment, WorkflowState,
 //               AutomationRule + all agent infra tables
-//               Written by agents after human validation.
 //
 // Cross-schema references: agents tables store IDs that point
 // to business tables, but Prisma does not enforce FK across
@@ -19,7 +17,7 @@
 //   PostgreSQL 15+
 //   Prisma 5.0+  (multiSchema preview)
 //
-// One-time DB setup (run once before prisma migrate dev):
+// One-time DB setup:
 //   CREATE SCHEMA business;
 //   CREATE SCHEMA agents;
 // ============================================================
@@ -37,7 +35,7 @@ datasource db {
 }
 
 // ============================================================
-// BUSINESS SCHEMA — identity & structure, written by humans
+// BUSINESS SCHEMA
 // ============================================================
 
 enum MemberRole {
@@ -67,8 +65,9 @@ enum IntegrationStatus {
   @@schema("business")
 }
 
-// Source of truth for all user identity.
-// Agents reference users by userId (String) — no FK enforced cross-schema.
+// ── User ───────────────────────────────────────────────────
+// Source of truth for identity. Replaces the old DefaultUser model.
+// The app reads id, name, email, avatar — same shape as DefaultUser.
 model User {
   id        String    @id
   name      String
@@ -84,7 +83,7 @@ model User {
   @@schema("business")
 }
 
-// Top-level container. All agents are scoped to a project.
+// ── Project ────────────────────────────────────────────────
 model Project {
   id              String    @id @default(uuid())
   key             String    @unique
@@ -102,8 +101,7 @@ model Project {
   @@schema("business")
 }
 
-// Membership of a User in a Project with a role.
-// Assignment Agent reads role + skills to decide who gets what.
+// ── TeamMember ─────────────────────────────────────────────
 model TeamMember {
   id        String     @id @default(uuid())
   userId    String
@@ -119,8 +117,7 @@ model TeamMember {
   @@schema("business")
 }
 
-// Written by users in profile settings.
-// Read by Assignment Agent to match tasks to the right person.
+// ── MemberSkill ────────────────────────────────────────────
 model MemberSkill {
   id        String   @id @default(uuid())
   userId    String
@@ -135,8 +132,7 @@ model MemberSkill {
   @@schema("business")
 }
 
-// One row per external tool connected to a project.
-// Automation & Integration Agent reads this for webhook routing.
+// ── Integration ────────────────────────────────────────────
 model Integration {
   id            String              @id @default(uuid())
   projectId     String
@@ -158,7 +154,7 @@ model Integration {
 }
 
 // ============================================================
-// AGENTS SCHEMA — everything AI produces, validated by humans
+// AGENTS SCHEMA
 // ============================================================
 
 enum ValidationStatus {
@@ -170,6 +166,8 @@ enum ValidationStatus {
   @@schema("agents")
 }
 
+// TaskStatus mirrors the old IssueStatus exactly so the UI needs no changes.
+// BACKLOG is new (tasks not yet in any sprint).
 enum TaskStatus {
   BACKLOG
   TODO
@@ -180,6 +178,7 @@ enum TaskStatus {
   @@schema("agents")
 }
 
+// TaskType mirrors old IssueType exactly — no UI changes needed.
 enum TaskType {
   BUG
   TASK
@@ -199,6 +198,11 @@ enum Priority {
   @@schema("agents")
 }
 
+// SprintPlanStatus mirrors old SprintStatus:
+//   PENDING  → DRAFT
+//   ACTIVE   → ACTIVE
+//   CLOSED   → CLOSED
+// VALIDATED is new (agent output approved, not yet started).
 enum SprintPlanStatus {
   DRAFT
   VALIDATED
@@ -236,7 +240,7 @@ enum AutomationAction {
   @@schema("agents")
 }
 
-// ── Shared infra — used by all agents ─────────────────────
+// ── Agent infra ────────────────────────────────────────────
 
 model AgentSession {
   id          String   @id @default(uuid())
@@ -326,27 +330,91 @@ model Notification {
   @@schema("agents")
 }
 
-// ── Task Agent ─────────────────────────────────────────────
+// ── SprintPlan ─────────────────────────────────────────────
+// Replaces the old Sprint model.
+// Added: creatorId, color — required by the existing UI.
+// Kept:  name, startDate, endDate, status, projectId.
+model SprintPlan {
+  id           String  @id @default(uuid())
+  projectId    String
+  validationId String?
 
+  name      String
+  goal      String           @default("") @db.Text
+  startDate DateTime?
+  endDate   DateTime?
+  status    SprintPlanStatus @default(DRAFT)
+
+  // UI uses color to tint sprint labels on the board.
+  color String @default("#0052CC")
+
+  // creatorId scopes sprints to the user who created them (mirrors old Sprint.creatorId).
+  creatorId String
+
+  totalCapacityPoints Int @default(0)
+  plannedPoints       Int @default(0)
+  bufferPoints        Int @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tasks          Task[]
+  velocityRecord VelocityRecord?
+  riskAssessment RiskAssessment?
+
+  @@index([projectId])
+  @@index([creatorId])
+  @@schema("agents")
+}
+
+// ── Task ───────────────────────────────────────────────────
+// Replaces the old Issue model.
+// Field-name aliases keep the existing UI and helpers working
+// without renaming every reference.
+//
+// Old → New mapping (column name in DB is new, Prisma field alias used in app):
+//   Issue.name          → Task.title          (@map applied — see note below)
+//   Issue.sprintId      → Task.sprintPlanId
+//   Issue.parentId      → Task.parentTaskId
+//   Issue.isDeleted     → Task.deletedAt      (boolean → DateTime? soft-delete)
+//   Issue.sprintColor   → Task.sprintColor    (re-added)
+//   Issue.creatorId     → Task.creatorId      (kept)
+//   Issue.boardPosition → Task.boardPosition  (kept)
+//   Issue.sprintPosition→ Task.sprintPosition (kept)
+//
+// NOTE on `name` vs `title`:
+//   The helpers (generateIssuesForClient, issueNotInSearch) reference `issue.name`.
+//   We keep the Prisma field as `title` (correct domain language) but expose it
+//   via a view/alias approach in the API layer — see the tasks route for the
+//   `toIssueShape()` adapter that maps title→name before returning to the client.
 model Task {
   id        String @id @default(uuid())
   projectId String
 
+  // Sprint link — was Issue.sprintId
   sprintPlanId String?
   sprintPlan   SprintPlan? @relation(fields: [sprintPlanId], references: [id])
 
+  // People
   assigneeId String?
   reviewerId String?
+  reporterId String
+  creatorId  String  // scopes task to creating user, mirrors old Issue.creatorId
 
+  // Hierarchy — was Issue.parentId
   parentTaskId String?
   validationId String?
 
-  key         String
+  // Content
+  // `title` is the DB column; the API layer exposes it as `name` to the client
+  // so zero UI changes are needed.
   title       String
   description String? @db.Text
 
   acceptanceCriteria Json @default("[]")
 
+  // Enums — values are identical to old IssueStatus / IssueType
   status   TaskStatus @default(BACKLOG)
   type     TaskType   @default(TASK)
   priority Priority   @default(P3_MEDIUM)
@@ -355,20 +423,26 @@ model Task {
   storyPoints    Int?
   estimatedHours Float?
 
+  // Board state — carried over from old Issue unchanged
+  sprintPosition Float   @default(0)
+  boardPosition  Float   @default(-1)
+
+  // Sprint color — was on old Issue, used by the board UI to tint issue cards
+  sprintColor String?
+
+  // Soft-delete — was `isDeleted: Boolean` on old Issue.
+  // The API layer converts: isDeleted=true → deletedAt=now(), isDeleted=false → deletedAt=null
+  // and converts back: deletedAt!=null → isDeleted=true when returning to client.
+  deletedAt DateTime?
+
+  // Blocking
   isBlocked     Boolean @default(false)
   blockedReason String?
 
-  sprintPosition Float @default(0)
-  boardPosition  Float @default(-1)
+  aiGenerated Boolean @default(false)
 
-  reporterId String
-  creatorId  String
-
-  aiGenerated Boolean @default(true)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   comments Comment[]
 
@@ -378,9 +452,15 @@ model Task {
   @@unique([key, projectId])
   @@index([projectId])
   @@index([sprintPlanId])
+  @@index([creatorId])
   @@schema("agents")
+
+  // key is auto-generated in application layer: "<PROJECT_KEY>-<n>"
+  key String
 }
 
+// ── Comment ────────────────────────────────────────────────
+// taskId replaces old issueId — same semantics.
 model Comment {
   id        String    @id @default(uuid())
   taskId    String
@@ -397,6 +477,7 @@ model Comment {
   @@schema("agents")
 }
 
+// ── DuplicateDetection ─────────────────────────────────────
 model DuplicateDetection {
   id              String   @id @default(uuid())
   projectId       String
@@ -411,6 +492,7 @@ model DuplicateDetection {
   @@schema("agents")
 }
 
+// ── IssueSplitSuggestion ───────────────────────────────────
 model IssueSplitSuggestion {
   id             String   @id @default(uuid())
   originalTaskId String
@@ -425,8 +507,7 @@ model IssueSplitSuggestion {
   @@schema("agents")
 }
 
-// ── Assignment Agent ───────────────────────────────────────
-
+// ── Assignment ─────────────────────────────────────────────
 model Assignment {
   id           String  @id @default(uuid())
   taskId       String
@@ -448,35 +529,7 @@ model Assignment {
   @@schema("agents")
 }
 
-// ── Planning Agent ─────────────────────────────────────────
-
-model SprintPlan {
-  id           String  @id @default(uuid())
-  projectId    String
-  validationId String?
-
-  name      String
-  goal      String           @db.Text
-  startDate DateTime?
-  endDate   DateTime?
-  status    SprintPlanStatus @default(DRAFT)
-
-  totalCapacityPoints Int @default(0)
-  plannedPoints       Int @default(0)
-  bufferPoints        Int @default(0)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  tasks          Task[]
-  velocityRecord VelocityRecord?
-  riskAssessment RiskAssessment?
-
-  @@index([projectId])
-  @@schema("agents")
-}
-
+// ── VelocityRecord ─────────────────────────────────────────
 model VelocityRecord {
   id              String    @id @default(uuid())
   projectId       String
@@ -496,6 +549,7 @@ model VelocityRecord {
   @@schema("agents")
 }
 
+// ── RiskAssessment ─────────────────────────────────────────
 model RiskAssessment {
   id           String   @id @default(uuid())
   projectId    String
@@ -513,8 +567,7 @@ model RiskAssessment {
   @@schema("agents")
 }
 
-// ── Workflow Agent ─────────────────────────────────────────
-
+// ── WorkflowTransition ─────────────────────────────────────
 model WorkflowTransition {
   id          String   @id @default(uuid())
   taskId      String
@@ -532,6 +585,7 @@ model WorkflowTransition {
   @@schema("agents")
 }
 
+// ── BlockedTask ────────────────────────────────────────────
 model BlockedTask {
   id           String    @id @default(uuid())
   taskId       String
@@ -549,6 +603,7 @@ model BlockedTask {
   @@schema("agents")
 }
 
+// ── BottleneckRecord ───────────────────────────────────────
 model BottleneckRecord {
   id              String    @id @default(uuid())
   projectId       String
@@ -566,6 +621,7 @@ model BottleneckRecord {
   @@schema("agents")
 }
 
+// ── WorkflowSuggestion ─────────────────────────────────────
 model WorkflowSuggestion {
   id          String    @id @default(uuid())
   projectId   String
@@ -581,8 +637,7 @@ model WorkflowSuggestion {
   @@schema("agents")
 }
 
-// ── Automation & Integration Agent ────────────────────────
-
+// ── WebhookEvent ───────────────────────────────────────────
 model WebhookEvent {
   id          String    @id @default(uuid())
   projectId   String
@@ -601,6 +656,7 @@ model WebhookEvent {
   @@schema("agents")
 }
 
+// ── AutomationRule ─────────────────────────────────────────
 model AutomationRule {
   id            String            @id @default(uuid())
   projectId     String
@@ -625,6 +681,7 @@ model AutomationRule {
   @@schema("agents")
 }
 
+// ── AutomationExecution ────────────────────────────────────
 model AutomationExecution {
   id             String   @id @default(uuid())
   ruleId         String
@@ -644,6 +701,7 @@ model AutomationExecution {
   @@schema("agents")
 }
 
+// ── AutomationSuggestion ───────────────────────────────────
 model AutomationSuggestion {
   id              String   @id @default(uuid())
   projectId       String
@@ -658,6 +716,7 @@ model AutomationSuggestion {
   @@schema("agents")
 }
 
+// ── PullRequestLink ────────────────────────────────────────
 model PullRequestLink {
   id           String    @id @default(uuid())
   projectId    String
