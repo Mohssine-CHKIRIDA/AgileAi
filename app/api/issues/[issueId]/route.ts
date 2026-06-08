@@ -4,14 +4,15 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
 import { getDevAuth } from "@/server/dev-auth";
-import { IssueStatus, type Issue, IssueType, type DefaultUser } from "@prisma/client";
+import { TaskStatus, type Task, TaskType, type User } from "@prisma/client";
 import { z } from "zod";
 import { type GetIssuesResponse } from "../route";
+import { type IssueShape, toIssueShape, toTaskUpdateData } from "@/utils/task-adapter";
 
 export type GetIssueDetailsResponse = {
   issue: GetIssuesResponse["issues"][number] | null;
 };
-export type PostIssueResponse = { issue: Issue };
+export type PostIssueResponse = { issue: Task };
 
 type ParamsType = { params: { issueId: string } };
 
@@ -24,19 +25,53 @@ export async function GET(
   { params }: { params: { issueId: string } }
 ) {
   const { issueId } = params;
-  const issue = await (prisma as any).issue.findUnique({ where: { id: issueId } });
-  if (!issue?.parentId) {
-    return NextResponse.json({ issue: { ...issue, parent: null } });
+  const task = await prisma.task.findUnique({ where: { id: issueId } });
+  if (!task) {
+    return NextResponse.json({ issue: null });
   }
-  const parent = await (prisma as any).issue.findUnique({ where: { id: issue.parentId } });
-  return NextResponse.json({ issue: { ...issue, parent } });
+
+  // Resolve assignee & reporter users
+  const userIds = [task.assigneeId, task.reporterId].filter((id): id is string => Boolean(id));
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+  });
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const assignee = userMap.get(task.assigneeId ?? "") ?? null;
+  const reporter = userMap.get(task.reporterId) ?? null;
+
+  // Resolve parent issue if exists
+  let parentIssue = null;
+  if (task.parentTaskId) {
+    const parentTask = await prisma.task.findUnique({ where: { id: task.parentTaskId } });
+    if (parentTask) {
+      const parentAssignee = parentTask.assigneeId
+        ? await prisma.user.findUnique({ where: { id: parentTask.assigneeId } })
+        : null;
+      parentIssue = toIssueShape(parentTask, { assignee: parentAssignee });
+    }
+  }
+
+  // Resolve child issues if any
+  const childTasks = await prisma.task.findMany({
+    where: { parentTaskId: task.id, deletedAt: null },
+  });
+  const childIssues = childTasks.map((ct) => toIssueShape(ct));
+
+  const issue = toIssueShape(task, {
+    assignee,
+    reporter,
+    parent: parentIssue,
+    children: childIssues,
+  });
+
+  return NextResponse.json({ issue });
 }
 
 const patchIssueBodyValidator = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
-  type: z.nativeEnum(IssueType).optional(),
-  status: z.nativeEnum(IssueStatus).optional(),
+  type: z.nativeEnum(TaskType).optional(),
+  status: z.nativeEnum(TaskStatus).optional(),
   sprintPosition: z.number().optional(),
   boardPosition: z.number().optional(),
   assigneeId: z.string().nullable().optional(),
@@ -49,7 +84,7 @@ const patchIssueBodyValidator = z.object({
 
 export type PatchIssueBody = z.infer<typeof patchIssueBodyValidator>;
 export type PatchIssueResponse = {
-  issue: Issue & { assignee: DefaultUser | null };
+  issue: IssueShape;
 };
 
 /**
@@ -76,36 +111,41 @@ export async function PATCH(req: NextRequest, { params }: ParamsType) {
 
   const { data: valid } = validated;
 
-  const currentIssue = await (prisma as any).issue.findUnique({ where: { id: issueId } });
-  if (!currentIssue) return new Response("Issue not found", { status: 404 });
+  const currentTask = await prisma.task.findUnique({ where: { id: issueId } });
+  if (!currentTask) return new Response("Task not found", { status: 404 });
 
-  const issue = await (prisma as any).issue.update({
+  const updatedTask = await prisma.task.update({
     where: { id: issueId },
-    data: {
-      name: valid.name ?? undefined,
-      description: valid.description ?? undefined,
-      status: valid.status ?? undefined,
-      type: valid.type ?? undefined,
-      sprintPosition: valid.sprintPosition ?? undefined,
-      assigneeId: valid.assigneeId === undefined ? undefined : valid.assigneeId,
-      reporterId: valid.reporterId ?? undefined,
-      isDeleted: valid.isDeleted ?? undefined,
-      sprintId: valid.sprintId === undefined ? undefined : valid.sprintId,
-      parentId: valid.parentId === undefined ? undefined : valid.parentId,
-      sprintColor: valid.sprintColor ?? undefined,
-      boardPosition: valid.boardPosition ?? undefined,
-    },
+    data: toTaskUpdateData({
+      name: valid.name,
+      description: valid.description,
+      status: valid.status,
+      type: valid.type,
+      sprintPosition: valid.sprintPosition,
+      assigneeId: valid.assigneeId,
+      reporterId: valid.reporterId,
+      isDeleted: valid.isDeleted,
+      sprintId: valid.sprintId,
+      parentId: valid.parentId,
+      sprintColor: valid.sprintColor,
+      boardPosition: valid.boardPosition,
+    }),
   });
 
   // Resolve assignee from local DB
-  let assignee: DefaultUser | null = null;
-  if (issue.assigneeId) {
-    assignee = await (prisma as any).defaultUser.findUnique({
-      where: { id: issue.assigneeId },
+  let assignee = null;
+  if (updatedTask.assigneeId) {
+    assignee = await prisma.user.findUnique({
+      where: { id: updatedTask.assigneeId },
     }) ?? null;
   }
+  const reporter = await prisma.user.findUnique({
+    where: { id: updatedTask.reporterId },
+  }) ?? null;
 
-  return NextResponse.json({ issue: { ...issue, assignee } });
+  const issue = toIssueShape(updatedTask, { assignee, reporter });
+
+  return NextResponse.json({ issue });
 }
 
 /**
@@ -120,10 +160,17 @@ export async function DELETE(req: NextRequest, { params }: ParamsType) {
 
   const { issueId } = params;
 
-  const issue = await (prisma as any).issue.update({
+  const updatedTask = await prisma.task.update({
     where: { id: issueId },
-    data: { isDeleted: true, boardPosition: -1, sprintPosition: -1 },
+    data: {
+      deletedAt: new Date(),
+      boardPosition: -1,
+      sprintPosition: -1,
+    },
   });
+
+  const issue = toIssueShape(updatedTask);
 
   return NextResponse.json({ issue });
 }
+

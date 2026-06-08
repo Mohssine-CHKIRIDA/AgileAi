@@ -9,6 +9,8 @@ import {
 } from "./ui/navigation-menu";
 import { usePathname } from "next/navigation";
 import { FaChessPawn, FaChevronRight } from "react-icons/fa";
+import { AiOutlineRobot } from "react-icons/ai";
+import { Logo } from "./logo";
 import { useProject } from "@/hooks/query-hooks/use-project";
 
 type NavItemType = {
@@ -41,6 +43,15 @@ const Sidebar: React.FC = () => {
     },
   ];
 
+  const agentItems = [
+    {
+      id: "agents",
+      label: "Agent Workspace",
+      icon: AiOutlineRobot,
+      href: `/project/agents`,
+    },
+  ];
+
   const developmentItems = [
     {
       id: "development",
@@ -50,18 +61,8 @@ const Sidebar: React.FC = () => {
     },
   ];
   return (
-    <div className="flex h-full w-64 flex-col gap-y-5 bg-gray-50 p-3 shadow-inner">
-      <div className="my-5 flex items-center gap-x-2 px-3">
-        <div className="mt-1 flex items-center justify-center rounded-sm bg-[#FF5630] p-1 text-xs font-bold text-white">
-          <FaChessPawn className="aspect-square text-2xl" />
-        </div>
-        <div>
-          <h2 className="-mb-[0.5px] text-sm font-semibold text-gray-600">
-            {project?.name ?? "Project Name"}
-          </h2>
-          <p className="text-xs text-gray-500">Software Project</p>
-        </div>
-      </div>
+    <div className="flex h-full w-64 flex-col gap-y-5 bg-gray-50 p-3 shadow-inner pt-6">
+      <NavList label={"AI AGENTS"} items={agentItems} />
       <NavList label={"PLANNING"} items={planningItems} />
       <NavList label={"DEVELOPMENT"} items={developmentItems} />
     </div>

@@ -4,11 +4,13 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
 import { getDevAuth } from "@/server/dev-auth";
-import { SprintPlanStatus, type SprintPlan } from "@prisma/client";
+import { SprintPlanStatus } from "@prisma/client";
 import { z } from "zod";
+import { type Sprint } from "@/utils/types";
+import { toSprintShape } from "@/utils/task-adapter";
 
 export type PatchSprintBody = z.infer<typeof patchSprintBodyValidator>;
-export type PatchSprintResponse = { sprint: SprintPlan };
+export type PatchSprintResponse = { sprint: Sprint };
 
 const patchSprintBodyValidator = z.object({
   name: z.string().optional(),
@@ -107,7 +109,7 @@ export async function PATCH(req: NextRequest, { params }: ParamsType) {
     },
   });
 
-  return NextResponse.json<PatchSprintResponse>({ sprint });
+  return NextResponse.json<PatchSprintResponse>({ sprint: toSprintShape(sprint) });
 }
 
 /**
@@ -139,5 +141,5 @@ export async function DELETE(req: NextRequest, { params }: ParamsType) {
     data: { deletedAt: new Date() },
   });
 
-  return NextResponse.json<PatchSprintResponse>({ sprint });
+  return NextResponse.json<PatchSprintResponse>({ sprint: toSprintShape(sprint) });
 }

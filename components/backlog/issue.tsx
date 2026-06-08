@@ -78,7 +78,7 @@ const Issue: React.FC<{
               >
                 <MdEdit className="text-sm" />
               </Button>
-              {isEpic(issue.parent) ? <EpicName issue={issue.parent} /> : null}
+              {isEpic(issue.parent) ? <EpicName issue={issue.parent!} /> : null}
             </div>
           </div>
           <IssueContextMenu isEditing={isEditing} className="flex-auto">
@@ -112,7 +112,7 @@ const Issue: React.FC<{
 };
 
 export const EpicName: React.FC<{
-  issue: IssueType["parent"];
+  issue: NonNullable<IssueType["parent"]>;
   className?: string;
 }> = ({ issue, className }) => {
   const lightColor = LIGHT_COLORS.find(

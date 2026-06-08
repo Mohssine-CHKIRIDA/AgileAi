@@ -9,9 +9,8 @@ import {
   ModalTitle,
   ModalTrigger,
 } from "@/components/ui/modal";
-import { type Sprint } from "@prisma/client";
+import { type Sprint, type IssueType } from "@/utils/types";
 import { CompleteSprintForm } from "./form";
-import { type IssueType } from "@/utils/types";
 import { SprintTrophy } from "@/components/svgs";
 
 const CompleteSprintModal: React.FC<{

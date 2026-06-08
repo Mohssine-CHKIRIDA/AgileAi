@@ -3,12 +3,14 @@
  */
 import { prisma, ratelimit } from "@/server/db";
 import { getDevAuth } from "@/server/dev-auth";
-import { SprintPlanStatus, type SprintPlan } from "@prisma/client";
+import { SprintPlanStatus } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { type Sprint } from "@/utils/types";
+import { toSprintShape } from "@/utils/task-adapter";
 
-export type PostSprintResponse = { sprint: SprintPlan };
-export type GetSprintsResponse = { sprints: SprintPlan[] };
+export type PostSprintResponse = { sprint: Sprint };
+export type GetSprintsResponse = { sprints: Sprint[] };
 
 const postSprintBodyValidator = z.object({
   projectId: z.string(),
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json<GetSprintsResponse>({ sprints });
+  return NextResponse.json<GetSprintsResponse>({ sprints: sprints.map(toSprintShape) });
 }
 
 /**
@@ -97,5 +99,5 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json<PostSprintResponse>({ sprint }, { status: 201 });
+  return NextResponse.json<PostSprintResponse>({ sprint: toSprintShape(sprint) }, { status: 201 });
 }

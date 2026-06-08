@@ -1,7 +1,7 @@
 "use client";
 import { toast } from "@/components/toast";
 import { api } from "@/utils/api";
-import { type Sprint } from "@prisma/client";
+import { type Sprint } from "@/utils/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type AxiosError } from "axios";
 import { TOO_MANY_REQUESTS } from "./use-issues";

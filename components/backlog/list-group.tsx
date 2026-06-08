@@ -8,7 +8,7 @@ import {
   type DraggableLocation,
   type DropResult,
 } from "react-beautiful-dnd";
-import { type IssueType } from "@/utils/types";
+import { type IssueType, type Sprint } from "@/utils/types";
 import { useCallback } from "react";
 import { useFiltersContext } from "@/context/use-filters-context";
 import {
@@ -24,7 +24,7 @@ import {
   sprintId,
 } from "@/utils/helpers";
 import { useSprints } from "@/hooks/query-hooks/use-sprints";
-import { type Sprint } from "@prisma/client";
+
 import { useIsAuthenticated } from "@/hooks/use-is-authed";
 
 const ListGroup: React.FC<{ className?: string }> = ({ className }) => {

@@ -25,7 +25,9 @@ const RoadmapPage = async () => {
     await queryClient.prefetchQuery(["sprints"], () =>
       getInitialSprintsFromServer(user?.id)
     ),
-    await queryClient.prefetchQuery(["project"], getInitialProjectFromServer),
+    await queryClient.prefetchQuery(["project"], () =>
+      getInitialProjectFromServer()
+    ),
   ]);
 
   const dehydratedState = dehydrate(queryClient);
