@@ -1,11 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
-import { getDevAuth } from "@/server/dev-auth";
+import { getRequestAuth } from "@/server/dev-auth";
+import { getActiveProject } from "@/server/project-membership";
+import {
+  deriveSprintName,
+  isGenericSprintName,
+} from "@/utils/sprint-display";
 import { TaskStatus, TaskType, Priority, SprintPlanStatus, ValidationStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = getDevAuth(req);
+    const { userId } = await getRequestAuth(req);
     const resolvedUserId = userId ?? "local-user-1";
 
     const body = await req.json();
@@ -15,13 +20,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    // 1. Locate the default project
-    const project = await prisma.project.findFirst({
-      where: { key: "JIRA-CLONE" },
-    });
+    // 1. Use the user's currently active project
+    const project = userId
+      ? await getActiveProject(userId)
+      : await prisma.project.findFirst({ where: { key: "JIRA-CLONE" } });
 
     if (!project) {
-      return NextResponse.json({ error: "Default project not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No active project. Join or create a project first." },
+        { status: 404 }
+      );
     }
 
     // 2. Fetch users in the system and compute their workloads
@@ -84,11 +92,56 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Log the Agent Session
+    const tasks = agentResponse.tasks ?? [];
+    const plannedFromTasks = tasks.reduce(
+      (sum: number, t: { storyPoints?: number | null }) =>
+        sum + (Number(t.storyPoints) || 0),
+      0
+    );
+
+    const sprintPlan = agentResponse.sprint_plan
+      ? {
+          ...agentResponse.sprint_plan,
+          name: isGenericSprintName(agentResponse.sprint_plan.name)
+            ? deriveSprintName(
+                agentResponse.sprint_plan.goal || agentResponse.sprint_goal,
+                tasks
+              )
+            : agentResponse.sprint_plan.name,
+          plannedPoints:
+            agentResponse.sprint_plan.plannedPoints || plannedFromTasks,
+        }
+      : agentResponse.sprint_plan;
+
+    const assignmentByTask = new Map(
+      (agentResponse.assignments ?? []).map(
+        (a: { taskId: string; assigneeId?: string; reviewerId?: string }) => [
+          a.taskId,
+          a,
+        ]
+      )
+    );
+
+    const tasksWithAssignees = tasks.map(
+      (task: {
+        id: string;
+        assigneeId?: string | null;
+        reviewerId?: string | null;
+      }) => {
+        const assignment = assignmentByTask.get(task.id);
+        return {
+          ...task,
+          assigneeId: task.assigneeId ?? assignment?.assigneeId ?? null,
+          reviewerId: task.reviewerId ?? assignment?.reviewerId ?? null,
+        };
+      }
+    );
+
     const sessionOutput = {
       action: "orchestrate",
       sprint_goal: agentResponse.sprint_goal,
-      sprint_plan: agentResponse.sprint_plan,
-      tasks: agentResponse.tasks,
+      sprint_plan: sprintPlan,
+      tasks: tasksWithAssignees,
       assignments: agentResponse.assignments,
       next_actions: agentResponse.next_actions,
       warnings: agentResponse.warnings,

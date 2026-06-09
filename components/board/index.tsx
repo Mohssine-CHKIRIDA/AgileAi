@@ -36,7 +36,7 @@ const Board: React.FC = () => {
 
   const { issues } = useIssues();
   const { sprints } = useSprints();
-  const { project } = useProject();
+  const { project, needsOnboarding } = useProject();
   const {
     search,
     assignees,
@@ -45,13 +45,32 @@ const Board: React.FC = () => {
     sprints: filterSprints,
   } = useFiltersContext();
 
+  const activeSprintIds = React.useMemo(
+    () =>
+      new Set(
+        (sprints ?? [])
+          .filter((s) => s.status === "ACTIVE")
+          .map((s) => s.id)
+      ),
+    [sprints]
+  );
+
+  const isOnActiveSprint = useCallback(
+    (issue: IssueType) => {
+      if (issue.sprintIsActive) return true;
+      if (!issue.sprintId) return false;
+      return activeSprintIds.has(issue.sprintId);
+    },
+    [activeSprintIds]
+  );
+
   const filterIssues = useCallback(
     (issues: IssueType[] | undefined, status: IssueStatus) => {
       if (!issues) return [];
       const filteredIssues = issues.filter((issue) => {
         if (
           issue.status === status &&
-          issue.sprintIsActive &&
+          isOnActiveSprint(issue) &&
           !isEpic(issue) &&
           !isSubtask(issue)
         ) {
@@ -69,7 +88,7 @@ const Board: React.FC = () => {
 
       return filteredIssues;
     },
-    [search, assignees, epics, issueTypes, filterSprints]
+    [search, assignees, epics, issueTypes, filterSprints, isOnActiveSprint]
   );
 
   const { updateIssue } = useIssues();
@@ -81,7 +100,17 @@ const Board: React.FC = () => {
     renderContainerRef.current.style.height = `calc(100vh - ${calculatedHeight}px)`;
   }, []);
 
-  if (!issues || !sprints || !project) {
+  if (!project) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-gray-500">
+        {needsOnboarding
+          ? "Choose or create a project to view the board."
+          : "Loading project..."}
+      </div>
+    );
+  }
+
+  if (!issues || !sprints) {
     return null;
   }
 
@@ -97,7 +126,7 @@ const Board: React.FC = () => {
       issueId: result.draggableId,
       status: destination.droppableId as IssueStatus,
       boardPosition: calculateIssueBoardPosition({
-        activeIssues: issues.filter((issue) => issue.sprintIsActive),
+        activeIssues: issues.filter((issue) => isOnActiveSprint(issue)),
         destination,
         source,
         droppedIssueId: result.draggableId,

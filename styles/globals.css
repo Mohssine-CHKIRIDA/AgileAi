@@ -112,4 +112,41 @@ div[data-state="open"] {
 /* Additional specific overrides */
 .shadow-inner {
   box-shadow: none !important;
+}
+
+/* Clerk user profile popover — readable on dark navbar */
+.cl-userButtonPopoverCard,
+.cl-userButtonPopoverMain {
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+.cl-userButtonPopoverActions {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+.cl-userButtonPopoverActionButton {
+  color: #f1f5f9 !important;
+}
+
+.cl-userButtonPopoverActionButton:hover {
+  background-color: #1e293b !important;
+}
+
+.cl-userButtonPopoverActionButtonText,
+.cl-userButtonPopoverActionButtonIcon,
+.cl-userPreviewMainIdentifier {
+  color: #f1f5f9 !important;
+}
+
+.cl-userPreviewSecondaryIdentifier,
+.cl-userButtonPopoverFooter {
+  color: #94a3b8 !important;
+}
+
+.cl-userButtonPopoverFooter {
+  background-color: #0f172a !important;
+  border-top: 1px solid #1e293b !important;
 }

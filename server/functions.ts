@@ -1,27 +1,40 @@
 /**
- * server/functions.ts  (updated for AgileAI schema)
+ * server/functions.ts (updated for AgileAI schema)
  *
- * Uses Task, SprintPlan, User (new models) instead of Issue, Sprint, DefaultUser.
- * The returned data shape is identical to before thanks to the task-adapter.
+ * Uses Task, SprintPlan, User (new models).
+ * Issues are scoped to the user's project membership, not creatorId.
  */
 
 import { prisma } from "./db";
+import { getActiveMembership } from "./project-membership";
 import { generateIssuesForClient, filterUserForClient } from "@/utils/helpers";
 import { SprintPlanStatus } from "@prisma/client";
 import { toSprintShape } from "@/utils/task-adapter";
+
+const INIT_PROJECT_ID = "init-project-id-dq8yh-d0as89hjd";
+const INIT_PROJECT_KEY = "JIRA-CLONE";
 
 // ── Issues / Tasks ────────────────────────────────────────────────────────────
 
 /**
  * getInitialIssuesFromServer
- * Previously queried prisma.issue — now queries prisma.task.
- * Returns IssueShape[] so all page components stay unchanged.
+ * Returns all tasks for the user's project.
  */
 export async function getInitialIssuesFromServer(userId: string | undefined | null) {
+  let projectId: string = INIT_PROJECT_ID;
+
+  if (userId) {
+    const membership = await getActiveMembership(userId);
+    if (!membership?.projectId) {
+      return [];
+    }
+    projectId = membership.projectId;
+  }
+
   const activeTasks = await prisma.task.findMany({
     where: {
-      creatorId: userId ?? "init",
-      deletedAt: null,              // was: isDeleted: false
+      projectId,
+      deletedAt: null,
     },
   });
 
@@ -29,21 +42,27 @@ export async function getInitialIssuesFromServer(userId: string | undefined | nu
     return [];
   }
 
-  // Active sprints — used to compute sprintIsActive on each task
   const activeSprints = await prisma.sprintPlan.findMany({
-    where: { status: SprintPlanStatus.ACTIVE },
+    where: {
+      projectId,
+      status: SprintPlanStatus.ACTIVE,
+      deletedAt: null,
+    },
   });
 
-  // Collect all user IDs referenced by the tasks
+  const taskUserIds = activeTasks
+    .flatMap((t) => [t.assigneeId, t.reporterId])
+    .filter((id): id is string => Boolean(id));
+
+  const teamMembers = await prisma.teamMember.findMany({
+    where: { projectId },
+    select: { userId: true },
+  });
+
   const userIds = [
-    ...new Set(
-      activeTasks
-        .flatMap((t) => [t.assigneeId, t.reporterId])
-        .filter((id): id is string => Boolean(id))
-    ),
+    ...new Set([...taskUserIds, ...teamMembers.map((m) => m.userId)]),
   ];
 
-  // Pull user data from prisma.user (business schema) — no Clerk needed
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
   });
@@ -57,22 +76,34 @@ export async function getInitialIssuesFromServer(userId: string | undefined | nu
 
 // ── Project ───────────────────────────────────────────────────────────────────
 
-export async function getInitialProjectFromServer(key = "JIRA-CLONE") {
-  const project = await prisma.project.findUnique({ where: { key } });
-  return project;
+export async function getInitialProjectFromServer(userId?: string | null) {
+  if (userId) {
+    const membership = await getActiveMembership(userId);
+    if (membership?.project && !membership.project.deletedAt) {
+      return membership.project;
+    }
+    return null;
+  }
+
+  return prisma.project.findUnique({ where: { key: INIT_PROJECT_KEY } });
 }
 
 // ── Sprints ───────────────────────────────────────────────────────────────────
 
-/**
- * getInitialSprintsFromServer
- * Previously queried prisma.sprint — now queries prisma.sprintPlan.
- * Returns the same sprint shape the UI expects (via toSprintShape adapter).
- */
 export async function getInitialSprintsFromServer(userId: string | undefined) {
+  let projectId: string = INIT_PROJECT_ID;
+
+  if (userId) {
+    const membership = await getActiveMembership(userId);
+    if (!membership?.projectId) {
+      return [];
+    }
+    projectId = membership.projectId;
+  }
+
   const sprints = await prisma.sprintPlan.findMany({
     where: {
-      creatorId: userId ?? "init",
+      projectId,
       deletedAt: null,
       status: {
         in: [SprintPlanStatus.ACTIVE, SprintPlanStatus.DRAFT],
@@ -84,24 +115,20 @@ export async function getInitialSprintsFromServer(userId: string | undefined) {
   return sprints.map(toSprintShape);
 }
 
-// ── Init helpers (seed / upsert on first login) ───────────────────────────────
+// ── Init helpers ──────────────────────────────────────────────────────────────
 
 export async function initProject() {
   await prisma.project.upsert({
-    where: { id: "init-project-id-dq8yh-d0as89hjd" },
+    where: { id: INIT_PROJECT_ID },
     update: {},
     create: {
-      id: "init-project-id-dq8yh-d0as89hjd",
+      id: INIT_PROJECT_ID,
       name: "Jira Clone Project",
-      key: "JIRA-CLONE",
+      key: INIT_PROJECT_KEY,
     },
   });
 }
 
-/**
- * initDefaultUsers
- * Previously upserted into prisma.defaultUser — now uses prisma.user (same fields).
- */
 export async function initDefaultUsers(
   defaultUsers: Array<{ id: string; email: string; name: string; avatar?: string }>
 ) {
@@ -121,10 +148,6 @@ export async function initDefaultUsers(
   );
 }
 
-/**
- * initDefaultProjectMembers
- * Previously upserted into prisma.member — now uses prisma.teamMember.
- */
 export async function initDefaultProjectMembers(
   defaultUsers: Array<{ id: string }>
 ) {
@@ -134,24 +157,19 @@ export async function initDefaultProjectMembers(
         where: {
           userId_projectId: {
             userId: user.id,
-            projectId: "init-project-id-dq8yh-d0as89hjd",
+            projectId: INIT_PROJECT_ID,
           },
         },
         update: {},
         create: {
           userId: user.id,
-          projectId: "init-project-id-dq8yh-d0as89hjd",
+          projectId: INIT_PROJECT_ID,
         },
       })
     )
   );
 }
 
-/**
- * initDefaultTasks  (was initDefaultIssues)
- * Seed data generator should return Task-shaped objects (title instead of name, etc).
- * If your seed data still uses old Issue field names, run them through toTaskCreateData first.
- */
 export async function initDefaultTasks(
   tasks: Array<{
     id: string;
@@ -179,13 +197,10 @@ export async function initDefaultTasks(
   );
 }
 
-/**
- * initDefaultTaskComments  (was initDefaultIssueComments)
- */
 export async function initDefaultTaskComments(
   comments: Array<{
     id: string;
-    taskId: string;   // was issueId
+    taskId: string;
     authorId: string;
     content: string;
   }>
@@ -201,10 +216,6 @@ export async function initDefaultTaskComments(
   );
 }
 
-/**
- * initDefaultSprints
- * Previously upserted into prisma.sprint — now uses prisma.sprintPlan.
- */
 export async function initDefaultSprints(
   sprints: Array<{
     id: string;

@@ -167,7 +167,11 @@ const EpicsAccordion: React.FC<{
       className="overflow-hidden"
     >
       {issues
-        ?.filter((issue) => issue.type == "EPIC")
+        ?.filter(
+          (issue) =>
+            issue.type === "EPIC" ||
+            (issue.type === "TASK" && !isSubtask(issue) && !issue.parentId)
+        )
         .map((issue, index) => (
           <AccordionItem key={issue.id} value={issue.key}>
             <div
@@ -190,7 +194,7 @@ const EpicsAccordion: React.FC<{
                 role="button"
                 onClick={() => setIssueKey(issue.key)}
               >
-                <IssueIcon issueType="EPIC" />
+                <IssueIcon issueType={issue.type === "EPIC" ? "EPIC" : "TASK"} />
                 <div className="flex flex-col gap-y-1 py-1">
                   <div className="flex items-center">
                     <div className="flex items-center gap-x-2">

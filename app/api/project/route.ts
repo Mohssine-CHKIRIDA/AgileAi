@@ -1,13 +1,20 @@
 /**
- * LOCAL DEV version — auth via X-Dev-User-Id header, no Clerk, no ratelimit.
+ * GET: Returns the user's project or signals onboarding is needed.
+ * POST: Creates a new project and adds the caller as OWNER.
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
 import { MemberRole, type Project } from "@prisma/client";
-import { getDevAuth } from "@/server/dev-auth";
+import { ensureUserSynced, getRequestAuth } from "@/server/dev-auth";
+import { getActiveMembership } from "@/server/project-membership";
 import { z } from "zod";
 
-export type GetProjectResponse = { project: Project | null };
+const INIT_PROJECT_ID = "init-project-id-dq8yh-d0as89hjd";
+
+export type GetProjectResponse = {
+  project: Project | null;
+  needsOnboarding?: boolean;
+};
 export type PostProjectResponse = { project: Project };
 
 const postProjectBodyValidator = z.object({
@@ -23,55 +30,45 @@ const postProjectBodyValidator = z.object({
 
 export type PostProjectBody = z.infer<typeof postProjectBodyValidator>;
 
-/**
- * GET /api/project?key=MYPROJECT
- * Header: X-Dev-User-Id: local-user-1
- */
 export async function GET(req: NextRequest) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
+
   if (!userId) {
-    return new Response(
-      "Missing X-Dev-User-Id header. Add it in Postman: X-Dev-User-Id: local-user-1",
-      { status: 403 }
-    );
+    const initProject = await prisma.project.findUnique({
+      where: { id: INIT_PROJECT_ID },
+    });
+    return NextResponse.json<GetProjectResponse>({
+      project: initProject,
+      needsOnboarding: false,
+    });
   }
 
-  const { searchParams } = new URL(req.url);
-  const key = searchParams.get("key");
-  if (!key) return new Response("Missing 'key' query parameter", { status: 400 });
+  await ensureUserSynced(userId);
 
-  const project = await prisma.project.findUnique({ where: { key } });
+  const membership = await getActiveMembership(userId);
 
-  if (!project || project.deletedAt !== null) {
-    return NextResponse.json<GetProjectResponse>({ project: null });
+  if (membership?.project && !membership.project.deletedAt) {
+    return NextResponse.json<GetProjectResponse>({
+      project: membership.project,
+      needsOnboarding: false,
+    });
   }
 
-  const membership = await prisma.teamMember.findUnique({
-    where: { userId_projectId: { userId, projectId: project.id } },
+  return NextResponse.json<GetProjectResponse>({
+    project: null,
+    needsOnboarding: true,
   });
-
-  if (!membership) {
-    return new Response("Forbidden: not a member of this project", { status: 403 });
-  }
-
-  return NextResponse.json<GetProjectResponse>({ project });
 }
 
-/**
- * POST /api/project
- * Header: X-Dev-User-Id: local-user-1
- * Body: { key, name, description? }
- */
 export async function POST(req: NextRequest) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) {
-    return new Response(
-      "Missing X-Dev-User-Id header. Add it in Postman: X-Dev-User-Id: local-user-1",
-      { status: 403 }
-    );
+    return new Response("Unauthorized", { status: 401 });
   }
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
+
+  await ensureUserSynced(userId);
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const body = await req.json();
@@ -87,19 +84,10 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.project.findUnique({ where: { key: valid.key } });
   if (existing) {
-    return new Response(`Project key '${valid.key}' is already taken`, { status: 409 });
+    return new Response(`Project key '${valid.key}' is already taken`, {
+      status: 409,
+    });
   }
-
-  // Ensure the dev user exists in the User table (upsert so it's idempotent)
-  await prisma.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: {
-      id: userId,
-      name: userId,
-      email: `${userId}@localhost.dev`,
-    },
-  });
 
   const project = await prisma.$transaction(async (tx) => {
     const created = await tx.project.create({
@@ -112,7 +100,12 @@ export async function POST(req: NextRequest) {
       },
     });
     await tx.teamMember.create({
-      data: { userId, projectId: created.id, role: MemberRole.OWNER },
+      data: {
+        userId,
+        projectId: created.id,
+        role: MemberRole.OWNER,
+        joinedAt: new Date(),
+      },
     });
     return created;
   });

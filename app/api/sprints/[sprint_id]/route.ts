@@ -3,7 +3,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
-import { getDevAuth } from "@/server/dev-auth";
+import { getRequestAuth } from "@/server/dev-auth";
 import { SprintPlanStatus } from "@prisma/client";
 import { z } from "zod";
 import { type Sprint } from "@/utils/types";
@@ -52,7 +52,7 @@ async function resolveSprintAndCheckAccess(sprintId: string, userId: string) {
  * Body: any subset of { name, goal, startDate, endDate, status, totalCapacityPoints, plannedPoints, bufferPoints }
  */
 export async function PATCH(req: NextRequest, { params }: ParamsType) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest, { params }: ParamsType) {
  * Soft-deletes the sprint and moves all its tasks back to BACKLOG.
  */
 export async function DELETE(req: NextRequest, { params }: ParamsType) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });

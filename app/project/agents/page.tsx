@@ -1,12 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { AiOutlineSend, AiOutlineRobot, AiOutlineHistory } from "react-icons/ai";
 import { BsCpu, BsTerminal, BsCheckCircleFill } from "react-icons/bs";
 import { FaUserCheck, FaTasks, FaRegCalendarAlt, FaSpinner } from "react-icons/fa";
 import { FiEdit2, FiCheck, FiX, FiAlertTriangle, FiPlus, FiTrash2 } from "react-icons/fi";
 import Link from "next/link";
 import clsx from "clsx";
+import { normalizeSprintPlanDisplay } from "@/utils/sprint-display";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/utils/query-keys";
+import { useProject } from "@/hooks/query-hooks/use-project";
+import { useRouter } from "next/navigation";
+import { api } from "@/utils/api";
 
 type StepStatus = "idle" | "running" | "completed";
 
@@ -45,6 +51,9 @@ const templates = [
 ];
 
 export default function AgentsPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const { project } = useProject();
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -66,6 +75,14 @@ export default function AgentsPage() {
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const sprintPlanDisplay = useMemo(
+    () =>
+      payload
+        ? normalizeSprintPlanDisplay(payload.sprint_plan, payload.tasks ?? [])
+        : null,
+    [payload]
+  );
 
   const [steps, setSteps] = useState<AgentStep[]>([
     {
@@ -170,7 +187,13 @@ export default function AgentsPage() {
       );
 
       setValidationId(data.validationId);
-      setPayload(data.payload);
+      setPayload({
+        ...data.payload,
+        sprint_plan: normalizeSprintPlanDisplay(
+          data.payload?.sprint_plan,
+          data.payload?.tasks ?? []
+        ),
+      });
       setTeamMembers(data.teamMembers || []);
 
       setRecentSessions((prev) => [
@@ -213,7 +236,17 @@ export default function AgentsPage() {
       }
 
       setSaveSuccess(true);
-      // Clean up local payload so we only show the success screen
+      if (project?.id) {
+        await queryClient.removeQueries({ queryKey: ["issues", project.id] });
+        await queryClient.removeQueries({ queryKey: ["sprints", project.id] });
+        await queryClient.prefetchQuery(queryKeys.issues(project.id), () =>
+          api.issues.getIssues({})
+        );
+        await queryClient.prefetchQuery(queryKeys.sprints(project.id), () =>
+          api.sprints.getSprints()
+        );
+        router.refresh();
+      }
       setPayload(null);
       setValidationId(null);
     } catch (err: any) {
@@ -613,17 +646,18 @@ export default function AgentsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-850">
                     <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 mb-1">Sprint Name</span>
-                    <span className="text-sm font-semibold text-slate-200">{payload.sprint_plan?.name}</span>
+                    <span className="text-sm font-semibold text-slate-200">{sprintPlanDisplay?.name}</span>
                   </div>
                   <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-850 md:col-span-2">
                     <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 mb-1">Sprint Goal</span>
-                    <span className="text-xs text-slate-300 font-medium italic">{payload.sprint_plan?.goal || "None"}</span>
+                    <span className="text-xs text-slate-300 font-medium italic">{sprintPlanDisplay?.goal || "None"}</span>
                   </div>
                   <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-850">
-                    <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 mb-1">Capacity</span>
+                    <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 mb-1">Story Points</span>
                     <span className="text-sm font-semibold text-slate-200">
-                      {payload.sprint_plan?.plannedPoints} / {payload.sprint_plan?.totalCapacityPoints} SP
+                      {sprintPlanDisplay?.plannedPoints} / {sprintPlanDisplay?.totalCapacityPoints} SP
                     </span>
+                    <span className="block text-[9px] text-slate-500 mt-1">Planned vs team capacity</span>
                   </div>
                 </div>
               )}

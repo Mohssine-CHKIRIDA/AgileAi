@@ -1,20 +1,44 @@
-"use client";
-import { Sidebar } from "@/components/sidebar";
-import { TopNavbar } from "@/components/top-navbar";
-import { FiltersProvider } from "@/context/use-filters-context";
-import { Fragment } from "react";
+import { auth } from "@clerk/nextjs";
+import { dehydrate } from "@tanstack/query-core";
+import { getQueryClient } from "@/utils/get-query-client";
+import { Hydrate } from "@/utils/hydrate";
+import {
+  getInitialIssuesFromServer,
+  getInitialProjectFromServer,
+  getInitialSprintsFromServer,
+} from "@/server/functions";
+import { ProjectShell } from "./project-shell";
+import { queryKeys } from "@/utils/query-keys";
 
-const ProjectLayout = ({ children }: { children: React.ReactNode }) => {
+const ProjectLayout = async ({ children }: { children: React.ReactNode }) => {
+  const { userId } = auth();
+  const queryClient = getQueryClient();
+
+  const project = await getInitialProjectFromServer(userId || undefined);
+  const projectId = project?.id;
+
+  await queryClient.prefetchQuery(queryKeys.project(), async () => ({
+    project,
+    needsOnboarding: !!userId && !project,
+  }));
+
+  if (projectId) {
+    await Promise.all([
+      queryClient.prefetchQuery(queryKeys.issues(projectId), () =>
+        getInitialIssuesFromServer(userId || undefined)
+      ),
+      queryClient.prefetchQuery(queryKeys.sprints(projectId), () =>
+        getInitialSprintsFromServer(userId || undefined)
+      ),
+    ]);
+  }
+
+  const dehydratedState = dehydrate(queryClient);
+
   return (
-    <Fragment>
-      <TopNavbar />
-      <main className="flex h-[calc(100vh_-_3rem)] w-full">
-        <Sidebar />
-        <FiltersProvider>
-          <div className="w-full max-w-[calc(100vw_-_16rem)]">{children}</div>
-        </FiltersProvider>
-      </main>
-    </Fragment>
+    <Hydrate state={dehydratedState}>
+      <ProjectShell>{children}</ProjectShell>
+    </Hydrate>
   );
 };
 

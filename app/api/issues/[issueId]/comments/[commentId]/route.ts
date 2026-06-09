@@ -4,7 +4,7 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
-import { getDevAuth } from "@/server/dev-auth";
+import { getRequestAuth } from "@/server/dev-auth";
 import { z } from "zod";
 import { filterUserForClient } from "@/utils/helpers";
 import { type GetIssueCommentResponse } from "../route";
@@ -19,7 +19,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { commentId: string } }
 ) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
@@ -56,7 +56,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { commentId: string } }
 ) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
