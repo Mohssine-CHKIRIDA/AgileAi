@@ -8,24 +8,24 @@ import {
   getInitialProjectFromServer,
   getInitialSprintsFromServer,
 } from "@/server/functions";
-import { currentUser } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs";
 
 export const metadata: Metadata = {
   title: "Roadmap",
 };
 
 const RoadmapPage = async () => {
-  const user = await currentUser();
+  const { userId } = auth();
   const queryClient = getQueryClient();
 
   await Promise.all([
-    await queryClient.prefetchQuery(["issues"], () =>
-      getInitialIssuesFromServer(user?.id)
+    queryClient.prefetchQuery(["issues"], () =>
+      getInitialIssuesFromServer(userId || undefined)
     ),
-    await queryClient.prefetchQuery(["sprints"], () =>
-      getInitialSprintsFromServer(user?.id)
+    queryClient.prefetchQuery(["sprints"], () =>
+      getInitialSprintsFromServer(userId || undefined)
     ),
-    await queryClient.prefetchQuery(["project"], () =>
+    queryClient.prefetchQuery(["project"], () =>
       getInitialProjectFromServer()
     ),
   ]);
