@@ -1,4 +1,4 @@
-<h1 align="center">Jira Clone built with React and Next.js 13 (app dir)</h1>
+<h1 align="center">Agile AI </h1>
 
 ![Tech stack](./assets/readme/tech-stack.png)
 
