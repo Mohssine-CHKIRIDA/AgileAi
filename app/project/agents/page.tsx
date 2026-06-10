@@ -237,8 +237,8 @@ export default function AgentsPage() {
 
       setSaveSuccess(true);
       if (project?.id) {
-        await queryClient.removeQueries({ queryKey: ["issues", project.id] });
-        await queryClient.removeQueries({ queryKey: ["sprints", project.id] });
+        queryClient.removeQueries({ queryKey: ["issues", project.id] });
+        queryClient.removeQueries({ queryKey: ["sprints", project.id] });
         await queryClient.prefetchQuery(queryKeys.issues(project.id), () =>
           api.issues.getIssues({})
         );

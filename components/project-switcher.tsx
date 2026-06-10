@@ -35,9 +35,9 @@ export function ProjectSwitcher() {
   const invalidateAll = async () => {
     await queryClient.invalidateQueries(queryKeys.project());
     await queryClient.invalidateQueries(queryKeys.projectList());
-    await queryClient.removeQueries({ queryKey: ["issues"] });
-    await queryClient.removeQueries({ queryKey: ["sprints"] });
-    await queryClient.removeQueries({ queryKey: ["project-members"] });
+    queryClient.removeQueries({ queryKey: ["issues"] });
+    queryClient.removeQueries({ queryKey: ["sprints"] });
+    queryClient.removeQueries({ queryKey: ["project-members"] });
     router.refresh();
   };
 
@@ -95,7 +95,7 @@ export function ProjectSwitcher() {
                       <button
                         type="button"
                         disabled={!!switchingId}
-                        onClick={() => handleSwitch(p.id)}
+                        onClick={() => void handleSwitch(p.id)}
                         className={clsx(
                           "flex w-full flex-col px-3 py-2 text-left hover:bg-slate-900",
                           p.isActive && "bg-slate-900/80"

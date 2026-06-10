@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { useIssues } from "@/hooks/query-hooks/use-issues";
 import { FaChevronDown } from "react-icons/fa";
 import clsx from "clsx";
-import { type IssueStatus } from "@prisma/client";
+import { type TaskStatus } from "@prisma/client";
 import { type IssueType } from "@/utils/types";
 import { NotImplemented } from "@/components/not-implemented";
 import { capitalizeMany } from "@/utils/helpers";
@@ -52,13 +52,15 @@ export type StatusObject = {
   lgTextColor: string;
 };
 type StatusMap = {
-  [key in IssueStatus]: string;
+  [key in TaskStatus]: string;
 };
 
 export const statusMap: StatusMap = {
   DONE: "DONE",
   IN_PROGRESS: "IN PROGRESS",
   TODO: "TO DO",
+  BACKLOG: "BACKLOG",
+  IN_REVIEW: "IN REVIEW",
 };
 
 const IssueSelectStatus: React.FC<{

@@ -16,7 +16,7 @@ import { useIssues } from "@/hooks/query-hooks/use-issues";
 import { Avatar } from "../avatar";
 import { toast } from "../toast";
 import { useIsAuthenticated } from "@/hooks/use-is-authed";
-import { type DefaultUser } from "@prisma/client";
+import { type User } from "@prisma/client";
 
 const IssueAssigneeSelect: React.FC<{
   issue: IssueType;
@@ -32,10 +32,10 @@ const IssueAssigneeSelect: React.FC<{
     avatar: undefined,
     email: "",
   };
-  const [selected, setSelected] = useState<DefaultUser["id"] | null>(
+  const [selected, setSelected] = useState<User["id"] | null>(
     issue.assignee?.id ?? null
   );
-  function handleSelectChange(value: DefaultUser["id"]) {
+  function handleSelectChange(value: User["id"]) {
     if (!isAuthenticated) {
       openAuthModal();
       return;

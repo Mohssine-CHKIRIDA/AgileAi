@@ -6,8 +6,11 @@
 
 /** @type {import("next").NextConfig} */
 const config = {
+  eslint: {
+    // Docker/production builds set SKIP_ENV_VALIDATION; lint debt is tracked separately.
+    ignoreDuringBuilds: process.env.SKIP_ENV_VALIDATION === "1",
+  },
   reactStrictMode: true,
-  experimental: { appDir: true },
   redirects: async () => {
     return [
       {

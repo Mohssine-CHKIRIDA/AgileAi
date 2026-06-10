@@ -19,7 +19,7 @@ import axios from "axios";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
-    const responseData = error.response?.data;
+    const responseData: unknown = error.response?.data;
     if (typeof responseData === "string" && responseData.length > 0) {
       return responseData;
     }
@@ -52,9 +52,9 @@ export function ProjectOnboardingModal({
   const invalidateProjectData = async () => {
     await queryClient.invalidateQueries(queryKeys.project());
     await queryClient.invalidateQueries(queryKeys.projectList());
-    await queryClient.removeQueries({ queryKey: ["issues"] });
-    await queryClient.removeQueries({ queryKey: ["sprints"] });
-    await queryClient.removeQueries({ queryKey: ["project-members"] });
+    queryClient.removeQueries({ queryKey: ["issues"] });
+    queryClient.removeQueries({ queryKey: ["sprints"] });
+    queryClient.removeQueries({ queryKey: ["project-members"] });
     router.refresh();
   };
 
@@ -172,7 +172,7 @@ export function ProjectOnboardingModal({
                 customColors
                 className="w-full bg-blue-600 text-white hover:bg-blue-700"
                 disabled={isSubmitting}
-                onClick={handleJoin}
+                onClick={() => void handleJoin()}
               >
                 {isSubmitting ? "Joining..." : "Join project"}
               </Button>
@@ -208,7 +208,7 @@ export function ProjectOnboardingModal({
                 customColors
                 className="w-full bg-blue-600 text-white hover:bg-blue-700"
                 disabled={isSubmitting}
-                onClick={handleCreate}
+                onClick={() => void handleCreate()}
               >
                 {isSubmitting ? "Creating..." : "Create project"}
               </Button>

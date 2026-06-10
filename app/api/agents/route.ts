@@ -57,9 +57,12 @@ export async function POST(req: NextRequest) {
     );
 
     // 3. Invoke the Python LangGraph API in stateless mode (skip_db_write: true)
+    const agentsApiUrl =
+      process.env.AGENTS_API_URL ?? "http://localhost:8000";
+
     let agentResponse;
     try {
-      const response = await fetch("http://localhost:8000/api/orchestrate", {
+      const response = await fetch(`${agentsApiUrl}/api/orchestrate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,7 +116,10 @@ export async function POST(req: NextRequest) {
         }
       : agentResponse.sprint_plan;
 
-    const assignmentByTask = new Map(
+    const assignmentByTask = new Map<
+      string,
+      { taskId: string; assigneeId?: string; reviewerId?: string }
+    >(
       (agentResponse.assignments ?? []).map(
         (a: { taskId: string; assigneeId?: string; reviewerId?: string }) => [
           a.taskId,

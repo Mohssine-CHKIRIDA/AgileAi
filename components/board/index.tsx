@@ -1,6 +1,6 @@
 "use client";
 import React, { Fragment, useCallback, useLayoutEffect, useRef } from "react";
-import { type IssueStatus } from "@prisma/client";
+import { type TaskStatus } from "@prisma/client";
 import "@/styles/split.css";
 import { BoardHeader } from "./header";
 import {
@@ -29,7 +29,7 @@ import { useProject } from "@/hooks/query-hooks/use-project";
 import { useFiltersContext } from "@/context/use-filters-context";
 import { useIsAuthenticated } from "@/hooks/use-is-authed";
 
-const STATUSES: IssueStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
+const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 const Board: React.FC = () => {
   const renderContainerRef = useRef<HTMLDivElement>(null);
@@ -65,7 +65,7 @@ const Board: React.FC = () => {
   );
 
   const filterIssues = useCallback(
-    (issues: IssueType[] | undefined, status: IssueStatus) => {
+    (issues: IssueType[] | undefined, status: TaskStatus) => {
       if (!issues) return [];
       const filteredIssues = issues.filter((issue) => {
         if (
@@ -124,7 +124,7 @@ const Board: React.FC = () => {
 
     updateIssue({
       issueId: result.draggableId,
-      status: destination.droppableId as IssueStatus,
+      status: destination.droppableId as TaskStatus,
       boardPosition: calculateIssueBoardPosition({
         activeIssues: issues.filter((issue) => isOnActiveSprint(issue)),
         destination,
@@ -187,7 +187,7 @@ function getAfterDropPrevNextIssue(props: IssueListPositionProps) {
   const { activeIssues, destination, source, droppedIssueId } = props;
   const beforeDropDestinationIssues = getSortedBoardIssues({
     activeIssues,
-    status: destination.droppableId as IssueStatus,
+    status: destination.droppableId as TaskStatus,
   });
   const droppedIssue = activeIssues.find(
     (issue) => issue.id === droppedIssueId
@@ -221,7 +221,7 @@ function getSortedBoardIssues({
   status,
 }: {
   activeIssues: IssueType[];
-  status: IssueStatus;
+  status: TaskStatus;
 }) {
   return activeIssues
     .filter((issue) => issue.status === status)

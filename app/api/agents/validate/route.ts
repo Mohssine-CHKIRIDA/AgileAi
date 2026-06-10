@@ -1,7 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { getRequestAuth } from "@/server/dev-auth";
-import { TaskStatus, TaskType, Priority, SprintPlanStatus, ValidationStatus } from "@prisma/client";
+import {
+  Prisma,
+  TaskStatus,
+  TaskType,
+  Priority,
+  SprintPlanStatus,
+  ValidationStatus,
+} from "@prisma/client";
 
 type AssignmentPayload = {
   taskId: string;
@@ -106,7 +113,7 @@ export async function POST(req: NextRequest) {
           status: ValidationStatus.APPROVED,
           decidedBy: resolvedUserId,
           decidedAt: new Date(),
-          payload: payload,
+          payload: payload as Prisma.InputJsonValue,
         },
       });
 

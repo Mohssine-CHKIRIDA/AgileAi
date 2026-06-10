@@ -8,10 +8,8 @@ import {
   NavigationMenuList,
 } from "./ui/navigation-menu";
 import { usePathname } from "next/navigation";
-import { FaChessPawn, FaChevronRight } from "react-icons/fa";
+import { FaChevronRight } from "react-icons/fa";
 import { AiOutlineRobot } from "react-icons/ai";
-import { Logo } from "./logo";
-import { useProject } from "@/hooks/query-hooks/use-project";
 
 type NavItemType = {
   id: string;
@@ -21,7 +19,6 @@ type NavItemType = {
 };
 
 const Sidebar: React.FC = () => {
-  const { project } = useProject();
   const planningItems = [
     {
       id: "roadmap",

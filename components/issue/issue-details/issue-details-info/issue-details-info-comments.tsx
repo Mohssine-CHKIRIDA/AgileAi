@@ -100,7 +100,7 @@ const CommentPreview: React.FC<{
       return;
     }
     updateComment({
-      issueId: comment.issueId,
+      issueId: comment.taskId,
       commentId: comment.id,
       content: JSON.stringify(state),
     });

@@ -17,7 +17,7 @@ const ProjectLayout = async ({ children }: { children: React.ReactNode }) => {
   const project = await getInitialProjectFromServer(userId || undefined);
   const projectId = project?.id;
 
-  await queryClient.prefetchQuery(queryKeys.project(), async () => ({
+  await queryClient.prefetchQuery(queryKeys.project(), () => ({
     project,
     needsOnboarding: !!userId && !project,
   }));

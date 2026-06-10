@@ -1,7 +1,7 @@
 "use client";
 import { toast } from "@/components/toast";
 import { api } from "@/utils/api";
-import { type Sprint } from "@prisma/client";
+import { type SprintPlan } from "@prisma/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type AxiosError } from "axios";
 import { TOO_MANY_REQUESTS } from "./use-issues";
@@ -27,8 +27,8 @@ export const useSprints = () => {
     {
       onMutate: async (newSprint) => {
         await queryClient.cancelQueries(sprintsKey);
-        const previousSprints = queryClient.getQueryData<Sprint[]>(sprintsKey);
-        queryClient.setQueryData(sprintsKey, (old?: Sprint[]) => {
+        const previousSprints = queryClient.getQueryData<SprintPlan[]>(sprintsKey);
+        queryClient.setQueryData(sprintsKey, (old?: SprintPlan[]) => {
           return (old ?? []).map((sprint) => {
             const { sprintId, ...updatedProps } = newSprint;
             if (sprint.id === sprintId) {
@@ -84,8 +84,8 @@ export const useSprints = () => {
     {
       onMutate: async (deletedSprint) => {
         await queryClient.cancelQueries(sprintsKey);
-        const previousSprints = queryClient.getQueryData<Sprint[]>(sprintsKey);
-        queryClient.setQueryData(sprintsKey, (old: Sprint[] | undefined) => {
+        const previousSprints = queryClient.getQueryData<SprintPlan[]>(sprintsKey);
+        queryClient.setQueryData(sprintsKey, (old: SprintPlan[] | undefined) => {
           return old?.filter((sprint) => sprint.id !== deletedSprint.sprintId);
         });
         return { previousSprints, sprintsKey };

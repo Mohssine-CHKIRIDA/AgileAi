@@ -46,7 +46,7 @@ const Issue: React.FC<{ issue: IssueType; index: number }> = ({
           </div>
           <div className="w-fit">
             {isEpic(issue.parent) ? (
-              <EpicName issue={issue.parent} className="py-0.5 text-sm" />
+              <EpicName issue={issue.parent!} className="py-0.5 text-sm" />
             ) : null}
           </div>
           <div className="mt-3 flex items-center justify-between">

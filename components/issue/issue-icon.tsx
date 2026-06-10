@@ -3,11 +3,11 @@ import { BsBookmarkFill, BsFillRecordFill } from "react-icons/bs";
 import { FaCheck } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import clsx from "clsx";
-import { type Issue as IssueType } from "@prisma/client";
+import { type Task as PrismaTask } from "@prisma/client";
 import { SubTaskIcon } from "../svgs";
 
 type IssueIconProps = {
-  issueType: IssueType["type"];
+  issueType: PrismaTask["type"];
 };
 
 const Icon: React.FC<{ children: ReactNode; className?: string }> = ({
