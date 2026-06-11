@@ -76,18 +76,6 @@ The system is composed of two main layers:
 - Prioritizes backlog items
 - Suggests sprint capacity allocation
 
-#### Workflow Agent
-
-- Monitors task progression
-- Detects bottlenecks
-- Recommends workflow improvements
-
-#### Automation & Integration Agent
-
-- Handles automated project actions
-- Integrates AI-driven workflows
-- Supports event-based automation
-
 #### Orchestrator Agent
 
 - Coordinates communication between agents
