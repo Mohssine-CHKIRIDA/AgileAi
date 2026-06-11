@@ -5,7 +5,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
 import { MemberRole, type User } from "@prisma/client";
-import { getDevAuth } from "@/server/dev-auth";
+import { getRequestAuth } from "@/server/dev-auth";
 import { z } from "zod";
 
 export type ProjectMember = User & { role: MemberRole; joinedAt: Date };
@@ -32,7 +32,7 @@ async function assertMember(userId: string, projectId: string) {
  * Header: X-Dev-User-Id: local-user-1
  */
 export async function GET(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) {
     return new Response("Missing X-Dev-User-Id header", { status: 403 });
   }
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest, { params }: MembersParams) {
  * Body: { userId, role? }
  */
 export async function POST(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest, { params }: MembersParams) {
  * Header: X-Dev-User-Id: local-user-1
  */
 export async function DELETE(req: NextRequest, { params }: MembersParams) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });

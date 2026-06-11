@@ -9,3 +9,144 @@ h1 {
 h2 {
     @apply text-base font-medium my-1;
 }
+
+/* Premium Dark Mode Global Overrides */
+body {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+.bg-white {
+  background-color: #090d16 !important;
+}
+
+.bg-gray-50 {
+  background-color: #090d16 !important;
+}
+
+.bg-gray-100 {
+  background-color: rgba(30, 41, 59, 0.45) !important;
+}
+
+.bg-slate-100 {
+  background-color: rgba(30, 41, 59, 0.45) !important;
+}
+
+.hover\:bg-gray-50:hover,
+.hover\:bg-gray-100:hover,
+.group-hover\:bg-gray-200:hover,
+.group-hover\:hover\:bg-gray-200:hover,
+.hover\:bg-gray-200:hover {
+  background-color: #1e293b !important;
+}
+
+/* Borders */
+.border,
+.border-b,
+.border-r,
+.border-t,
+.border-l,
+.border-inherit,
+.border-gray-200,
+.border-gray-300 {
+  border-color: #1e293b !important;
+}
+
+/* Text Colors */
+.text-gray-900,
+.text-gray-800,
+.text-gray-750,
+.text-gray-700,
+.text-black,
+.text-gray-600 {
+  color: #e2e8f0 !important;
+}
+
+.text-gray-500,
+.text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+/* Active links and selections */
+.\[\&\[data-active\]\]\:bg-blue-100[data-active] {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.\[\&\[data-active\]\]\:text-blue-700[data-active] {
+  color: #60a5fa !important;
+}
+
+/* Issue lists and cards */
+.group.flex.w-full {
+  background-color: #090d16 !important;
+}
+
+.group.flex.w-full:hover {
+  background-color: #151d30 !important;
+}
+
+/* Input elements, Select triggers and Option sheets */
+input,
+textarea,
+select,
+.react-select__control,
+div[role="combobox"],
+button[role="combobox"] {
+  background-color: #0d1321 !important;
+  color: #f1f5f9 !important;
+  border-color: #1e293b !important;
+}
+
+/* Modals and dialog overlays */
+div[role="dialog"],
+div[data-state="open"] {
+  background-color: #090d16;
+  border-color: #1e293b !important;
+}
+
+/* Split panel gutters */
+.gutter {
+  background-color: #0f172a !important;
+}
+
+/* Additional specific overrides */
+.shadow-inner {
+  box-shadow: none !important;
+}
+
+/* Clerk user profile popover — readable on dark navbar */
+.cl-userButtonPopoverCard,
+.cl-userButtonPopoverMain {
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+.cl-userButtonPopoverActions {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+.cl-userButtonPopoverActionButton {
+  color: #f1f5f9 !important;
+}
+
+.cl-userButtonPopoverActionButton:hover {
+  background-color: #1e293b !important;
+}
+
+.cl-userButtonPopoverActionButtonText,
+.cl-userButtonPopoverActionButtonIcon,
+.cl-userPreviewMainIdentifier {
+  color: #f1f5f9 !important;
+}
+
+.cl-userPreviewSecondaryIdentifier,
+.cl-userButtonPopoverFooter {
+  color: #94a3b8 !important;
+}
+
+.cl-userButtonPopoverFooter {
+  background-color: #0f172a !important;
+  border-top: 1px solid #1e293b !important;
+}

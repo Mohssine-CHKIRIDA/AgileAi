@@ -6,14 +6,13 @@ import { RoadmapHeader } from "./header";
 import { useProject } from "@/hooks/query-hooks/use-project";
 import Split from "react-split";
 import { IssueDetails } from "../issue/issue-details";
-import { notFound } from "next/navigation";
 import { EpicsTable } from "./epics-table";
 
 const Roadmap: React.FC = () => {
   const { issueKey, setIssueKey } = useSelectedIssueContext();
   const renderContainerRef = useRef<HTMLDivElement>(null);
 
-  const { project } = useProject();
+  const { project, needsOnboarding } = useProject();
 
   useLayoutEffect(() => {
     if (!renderContainerRef.current) return;
@@ -22,7 +21,13 @@ const Roadmap: React.FC = () => {
   }, []);
 
   if (!project) {
-    return notFound();
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-gray-500">
+        {needsOnboarding
+          ? "Choose or create a project to view the roadmap."
+          : "Loading project..."}
+      </div>
+    );
   }
 
   return (

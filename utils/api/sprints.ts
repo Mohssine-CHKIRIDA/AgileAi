@@ -13,24 +13,17 @@ const baseUrl = getBaseUrl();
 
 export const sprintsRoutes = {
   postSprint: async () => {
-    try {
-      const { data } = await axios.post<PostSprintResponse>(
-        `${baseUrl}/api/sprints`,
-        {
-          headers: getHeaders(),
-        }
-      );
-      return data.sprint;
-    } catch (error) {
-      console.error(error);
-    }
+    const { data } = await axios.post<PostSprintResponse>(
+      `${baseUrl}/api/sprints`,
+      {},
+      { headers: getHeaders() }
+    );
+    return data.sprint;
   },
   getSprints: async () => {
     const { data } = await axios.get<GetSprintsResponse>(
       `${baseUrl}/api/sprints`,
-      {
-        headers: getHeaders(),
-      }
+      { headers: getHeaders() }
     );
     return data.sprints;
   },
@@ -41,19 +34,14 @@ export const sprintsRoutes = {
     const { data } = await axios.patch<PatchSprintResponse>(
       `${baseUrl}/api/sprints/${sprintId}`,
       body,
-      {
-        headers: getHeaders(),
-      }
+      { headers: getHeaders() }
     );
-
     return data.sprint;
   },
   deleteSprint: async ({ sprintId }: { sprintId: string }) => {
     const { data } = await axios.delete<PatchSprintResponse>(
       `${baseUrl}/api/sprints/${sprintId}`,
-      {
-        headers: getHeaders(),
-      }
+      { headers: getHeaders() }
     );
     return data.sprint;
   },

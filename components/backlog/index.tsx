@@ -10,7 +10,7 @@ import { BacklogHeader } from "./header";
 import { useProject } from "@/hooks/query-hooks/use-project";
 
 const Backlog: React.FC = () => {
-  const { project } = useProject();
+  const { project, needsOnboarding } = useProject();
   const { issueKey, setIssueKey } = useSelectedIssueContext();
   const renderContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -20,7 +20,15 @@ const Backlog: React.FC = () => {
     renderContainerRef.current.style.height = `calc(100vh - ${calculatedHeight}px)`;
   }, []);
 
-  if (!project) return null;
+  if (!project) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-gray-500">
+        {needsOnboarding
+          ? "Choose or create a project to view the backlog."
+          : "Loading project..."}
+      </div>
+    );
+  }
 
   return (
     <Fragment>

@@ -1,6 +1,53 @@
-import { type Sprint, type Issue, type Comment } from "@prisma/client";
+interface SeedComment {
+  id: string;
+  content: string;
+  authorId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  isEdited: boolean;
+  taskId: string;
+  logId: string | null;
+}
 
-export function generateInitialUserComments(userId: string): Comment[] {
+type SeedSprintStatus = "DRAFT" | "VALIDATED" | "ACTIVE" | "CLOSED";
+
+interface SeedSprint {
+  id: string;
+  name: string;
+  description: string;
+  duration: string;
+  startDate: Date | null;
+  endDate: Date | null;
+  creatorId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  status: SeedSprintStatus;
+}
+
+interface SeedIssue {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  status: string;
+  type: string;
+  sprintPosition: number;
+  boardPosition: number;
+  reporterId: string;
+  assigneeId: string | null;
+  parentId: string | null;
+  sprintId: string | null;
+  isDeleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  sprintColor: string | null;
+  creatorId: string;
+}
+
+export function generateInitialUserComments(userId: string): SeedComment[] {
   const now = new Date();
   const slicedUserId = userId ? userId.slice(5, 12) : "init";
   return [
@@ -13,7 +60,7 @@ export function generateInitialUserComments(userId: string): Comment[] {
       updatedAt: now,
       deletedAt: null,
       isEdited: false,
-      issueId: "cd44dff4-d69b-4724-" + slicedUserId,
+      taskId: "cd44dff4-d69b-4724-" + slicedUserId,
       logId: null,
     },
     {
@@ -25,7 +72,7 @@ export function generateInitialUserComments(userId: string): Comment[] {
       updatedAt: now,
       deletedAt: null,
       isEdited: false,
-      issueId: "55a7d19e-844c-40fd-" + slicedUserId,
+      taskId: "55a7d19e-844c-40fd-" + slicedUserId,
       logId: null,
     },
     {
@@ -37,13 +84,13 @@ export function generateInitialUserComments(userId: string): Comment[] {
       updatedAt: now,
       deletedAt: null,
       isEdited: false,
-      issueId: "55a7d19e-844c-40fd-" + slicedUserId,
+      taskId: "55a7d19e-844c-40fd-" + slicedUserId,
       logId: null,
     },
   ];
 }
 
-export function generateInitialUserSprints(userId: string): Sprint[] {
+export function generateInitialUserSprints(userId: string): SeedSprint[] {
   const now = new Date();
   const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const slicedUserId = userId ? userId.slice(5, 12) : "init";
@@ -73,12 +120,12 @@ export function generateInitialUserSprints(userId: string): Sprint[] {
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
-      status: "PENDING",
+      status: "DRAFT",
     },
   ];
 }
 
-export function generateInitialUserIssues(userId: string): Issue[] {
+export function generateInitialUserIssues(userId: string): SeedIssue[] {
   const now = new Date();
   const slicedUserId = userId ? userId.slice(5, 12) : "init";
 

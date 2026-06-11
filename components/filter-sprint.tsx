@@ -11,7 +11,7 @@ import { useFiltersContext } from "@/context/use-filters-context";
 import { Button } from "@/components/ui/button";
 import { CountBall } from "./issue/issue-status-count";
 import { useSprints } from "@/hooks/query-hooks/use-sprints";
-import { type Sprint } from "@prisma/client";
+import { type Sprint } from "@/utils/types";
 const SprintFilter: React.FC = () => {
   const { sprints: filterSprints, setSprints } = useFiltersContext();
   const { sprints } = useSprints();

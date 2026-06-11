@@ -1,14 +1,14 @@
 /**
- * app/api/issues/route.ts  (updated for AgileAI schema)
+ * app/api/issues/route.ts (updated for AgileAI schema)
  *
- * Uses prisma.task instead of prisma.issue.
- * Adapter converts Task ↔ IssueShape so the client sees the exact same JSON.
- * Auth: X-Dev-User-Id header (dev mode). Swap back to getAuth() for production.
+ * GET: Returns all tasks for the user's project (not just creatorId-scoped).
+ * POST/PATCH: unchanged logic, just uses prisma.task.
  */
 
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma, ratelimit } from "@/server/db";
-import { getDevAuth } from "@/server/dev-auth";
+import { getRequestAuth } from "@/server/dev-auth";
+import { getActiveMembership } from "@/server/project-membership";
 import { TaskType, TaskStatus, SprintPlanStatus } from "@prisma/client";
 import { z } from "zod";
 import {
@@ -19,18 +19,14 @@ import {
 } from "@/utils/task-adapter";
 import { filterUserForClient, calculateInsertPosition } from "@/utils/helpers";
 
-// ── Response types (same as before — no changes needed in utils/api/issues.ts) ─
-
 export type GetIssuesResponse = { issues: IssueShape[] };
 
-// ── Validators ────────────────────────────────────────────────────────────────
-
 const postIssuesBodyValidator = z.object({
-  name: z.string(),                                            // maps → title
+  name: z.string(),
   type: z.enum(["BUG", "STORY", "TASK", "EPIC", "SUBTASK"]),
-  sprintId: z.string().nullable(),                             // maps → sprintPlanId
+  sprintId: z.string().nullable(),
   reporterId: z.string().nullable(),
-  parentId: z.string().nullable(),                             // maps → parentTaskId
+  parentId: z.string().nullable(),
   sprintColor: z.string().nullable().optional(),
 });
 
@@ -42,22 +38,35 @@ const patchIssuesBodyValidator = z.object({
   status: z.nativeEnum(TaskStatus).optional(),
   assigneeId: z.string().nullable().optional(),
   reporterId: z.string().optional(),
-  parentId: z.string().nullable().optional(),                  // maps → parentTaskId
-  sprintId: z.string().nullable().optional(),                  // maps → sprintPlanId
-  isDeleted: z.boolean().optional(),                           // maps → deletedAt
+  parentId: z.string().nullable().optional(),
+  sprintId: z.string().nullable().optional(),
+  isDeleted: z.boolean().optional(),
 });
 
 export type PatchIssuesBody = z.infer<typeof patchIssuesBodyValidator>;
 
 // ── GET /api/issues ───────────────────────────────────────────────────────────
 
+const INIT_PROJECT_ID = "init-project-id-dq8yh-d0as89hjd";
+
 export async function GET(req: NextRequest) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
+
+  let projectId: string | null = null;
+  if (userId) {
+    const membership = await getActiveMembership(userId);
+    projectId = membership?.projectId ?? null;
+    if (!projectId) {
+      return NextResponse.json<GetIssuesResponse>({ issues: [] });
+    }
+  } else {
+    projectId = INIT_PROJECT_ID;
+  }
 
   const activeTasks = await prisma.task.findMany({
     where: {
-      creatorId: userId ?? "init",
-      deletedAt: null,                          // was: isDeleted: false
+      projectId,
+      deletedAt: null,
     },
   });
 
@@ -66,15 +75,24 @@ export async function GET(req: NextRequest) {
   }
 
   const activeSprints = await prisma.sprintPlan.findMany({
-    where: { status: SprintPlanStatus.ACTIVE },
+    where: {
+      projectId,
+      status: SprintPlanStatus.ACTIVE,
+      deletedAt: null,
+    },
+  });
+
+  const taskUserIds = activeTasks
+    .flatMap((t) => [t.assigneeId, t.reporterId])
+    .filter((id): id is string => Boolean(id));
+
+  const teamMembers = await prisma.teamMember.findMany({
+    where: { projectId },
+    select: { userId: true },
   });
 
   const userIds = [
-    ...new Set(
-      activeTasks
-        .flatMap((t) => [t.assigneeId, t.reporterId])
-        .filter((id): id is string => Boolean(id))
-    ),
+    ...new Set([...taskUserIds, ...teamMembers.map((m) => m.userId)]),
   ];
 
   const users = await prisma.user.findMany({
@@ -93,7 +111,7 @@ export async function GET(req: NextRequest) {
 // ── POST /api/issues ──────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
@@ -110,38 +128,31 @@ export async function POST(req: NextRequest) {
 
   const { data: valid } = validated;
 
-  // Resolve projectId from the sprint (or fall back to first project the user owns)
+  // Resolve projectId
   let projectId: string;
   if (valid.sprintId) {
-    const sprint = await prisma.sprintPlan.findUnique({
-      where: { id: valid.sprintId },
-    });
+    const sprint = await prisma.sprintPlan.findUnique({ where: { id: valid.sprintId } });
     if (!sprint) return new Response("Sprint not found", { status: 404 });
     projectId = sprint.projectId;
   } else {
-    const membership = await prisma.teamMember.findFirst({
-      where: { userId },
-      orderBy: { joinedAt: "asc" },
-    });
-    if (!membership) return new Response("User has no project", { status: 400 });
+    const membership = await getActiveMembership(userId);
+    if (!membership?.projectId) {
+      return new Response("No active project", { status: 400 });
+    }
     projectId = membership.projectId;
   }
 
-  // Count existing tasks to generate key + position
   const existingTasks = await prisma.task.findMany({
-    where: { creatorId: userId },
+    where: { projectId },
   });
 
   const sprintTasks = existingTasks.filter(
     (t) => t.sprintPlanId === valid.sprintId && t.deletedAt === null
   );
 
-  // Determine board position: only add to board if sprint is ACTIVE
   let boardPosition = -1;
   if (valid.sprintId) {
-    const sprint = await prisma.sprintPlan.findUnique({
-      where: { id: valid.sprintId },
-    });
+    const sprint = await prisma.sprintPlan.findUnique({ where: { id: valid.sprintId } });
     if (sprint?.status === SprintPlanStatus.ACTIVE) {
       const todoTasks = sprintTasks.filter((t) => t.status === TaskStatus.TODO);
       boardPosition = calculateInsertPosition(todoTasks);
@@ -168,7 +179,6 @@ export async function POST(req: NextRequest) {
     }),
   });
 
-  // Return in the old Issue shape so the client is unaffected
   const issue = {
     ...task,
     name: task.title,
@@ -180,10 +190,10 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ issue }, { status: 201 });
 }
 
-// ── PATCH /api/issues  (batch update) ────────────────────────────────────────
+// ── PATCH /api/issues (batch update) ─────────────────────────────────────────
 
 export async function PATCH(req: NextRequest) {
-  const { userId } = getDevAuth(req);
+  const { userId } = await getRequestAuth(req);
   if (!userId) return new Response("Missing X-Dev-User-Id header", { status: 403 });
   const { success } = await ratelimit.limit(userId);
   if (!success) return new Response("Too many requests", { status: 429 });
@@ -217,7 +227,6 @@ export async function PATCH(req: NextRequest) {
     )
   );
 
-  // Map back to the old Issue shape
   const issues = updatedTasks.map((t) => ({
     ...t,
     name: t.title,

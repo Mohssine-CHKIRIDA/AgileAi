@@ -1,6 +1,6 @@
 "use client";
 import { type IssueType } from "@/utils/types";
-import { type Sprint } from "@prisma/client";
+import { type SprintPlan } from "@prisma/client";
 import { type ReactNode, createContext, useContext, useState } from "react";
 import { type UserResource } from "@clerk/types";
 
@@ -13,8 +13,8 @@ type FiltersContextProps = {
   setEpics: React.Dispatch<React.SetStateAction<IssueType["id"][]>>;
   issueTypes: IssueType["type"][];
   setIssueTypes: React.Dispatch<React.SetStateAction<IssueType["type"][]>>;
-  sprints: Sprint["id"][];
-  setSprints: React.Dispatch<React.SetStateAction<Sprint["id"][]>>;
+  sprints: SprintPlan["id"][];
+  setSprints: React.Dispatch<React.SetStateAction<SprintPlan["id"][]>>;
 };
 
 const FiltersContext = createContext<FiltersContextProps>({
@@ -40,7 +40,7 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
   const [search, setSearch] = useState<string>("");
   const [epics, setEpics] = useState<IssueType["id"][]>([]);
   const [issueTypes, setIssueTypes] = useState<IssueType["type"][]>([]);
-  const [sprints, setSprints] = useState<Sprint["id"][]>([]);
+  const [sprints, setSprints] = useState<SprintPlan["id"][]>([]);
 
   return (
     <FiltersContext.Provider

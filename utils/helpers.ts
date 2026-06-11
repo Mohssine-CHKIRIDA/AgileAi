@@ -1,15 +1,11 @@
 /**
- * utils/helpers.ts  (updated for AgileAI schema)
- *
- * All existing call sites are unchanged. generateIssuesForClient and
- * filterUserForClient now work with Task + User instead of Issue + DefaultUser.
+ * utils/helpers.ts (updated for AgileAI schema)
  */
 
 import { type IssueCountType } from "./types";
 import { type IssueShape, type IssueUser, generateTasksForClient } from "./task-adapter";
 import { type Task, type User } from "@prisma/client";
 
-// Re-export IssueShape as IssueType so utils/types.ts stays unchanged
 export type { IssueShape as IssueType };
 
 // ── URL / HTTP ────────────────────────────────────────────────────────────────
@@ -21,13 +17,20 @@ export function getBaseUrl() {
 }
 
 export function getHeaders() {
-  return {
+  if (typeof window === "undefined") {
+    return { "Content-type": "application/json" };
+  }
+
+  const headers: Record<string, string> = {
     "Content-type": "application/json",
-    // In local dev, read the dev user id from sessionStorage if set
-    ...(typeof window !== "undefined" && sessionStorage.getItem("devUserId")
-      ? { "x-dev-user-id": sessionStorage.getItem("devUserId")! }
-      : {}),
   };
+
+  const devUserId = sessionStorage.getItem("devUserId");
+  if (devUserId) {
+    headers["x-dev-user-id"] = devUserId;
+  }
+
+  return headers;
 }
 
 // ── String utils ──────────────────────────────────────────────────────────────
@@ -48,7 +51,10 @@ export function capitalizeMany(str: string) {
 export function getIssueCountByStatus(issues: IssueShape[]) {
   return issues.reduce(
     (acc, issue) => {
-      acc[issue.status as keyof IssueCountType]++;
+      const status = issue.status as keyof IssueCountType;
+      if (status in acc) {
+        acc[status]++;
+      }
       return acc;
     },
     { TODO: 0, IN_PROGRESS: 0, DONE: 0 } as IssueCountType
@@ -84,12 +90,6 @@ export function isDone(issue: IssueShape) {
 
 // ── User helpers ──────────────────────────────────────────────────────────────
 
-/**
- * filterUserForClient
- * Previously mapped a Clerk user to DefaultUser.
- * Now maps a prisma.User (business schema) to the same IssueUser shape.
- * Works for both Clerk users (duck-typed) and local prisma.User rows.
- */
 export function filterUserForClient(user: User | IssueUser): IssueUser {
   return {
     id: user.id,
@@ -101,11 +101,6 @@ export function filterUserForClient(user: User | IssueUser): IssueUser {
 
 // ── Issue / Task generation ───────────────────────────────────────────────────
 
-/**
- * generateIssuesForClient
- * Drop-in replacement: same signature as before, now delegates to task-adapter.
- * The `issues` parameter accepts Task[] (new) — callers pass prisma.task.findMany() results.
- */
 export function generateIssuesForClient(
   tasks: Task[],
   users: IssueUser[],
@@ -114,10 +109,6 @@ export function generateIssuesForClient(
   return generateTasksForClient(tasks, users, activeSprintIds ?? []);
 }
 
-/**
- * calculateInsertPosition
- * Works on Task[] — uses sprintPosition (same field name as old Issue).
- */
 export function calculateInsertPosition(tasks: Task[]) {
   return Math.max(...tasks.map((t) => t.sprintPosition), 0) + 1;
 }

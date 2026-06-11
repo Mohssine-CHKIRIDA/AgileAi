@@ -19,9 +19,11 @@ next-env.d.ts
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
 
 # debug
@@ -31,15 +33,26 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # local env files
-# do not commit any .env files to git, except for the .env.example file. https://create.t3.gg/en/usage/env-variables#using-environment-variables
 .env
 .env*.local
+
+# IDE
+.vscode/
+.idea/
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
+
+# logs
+logs/
+*.log
+
+# prisma local databases
+prisma/*.db
+prisma/*.db-journal
 
 # files to ignore
 /prisma/un-seed.ts

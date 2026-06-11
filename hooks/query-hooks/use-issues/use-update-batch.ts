@@ -5,41 +5,35 @@ import { type IssueType } from "@/utils/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type AxiosError } from "axios";
 import { TOO_MANY_REQUESTS } from ".";
+import { useProjectQueryKeys } from "@/hooks/use-project-query-keys";
 
 const useUpdateIssuesBatch = () => {
   const queryClient = useQueryClient();
+  const { issuesKey } = useProjectQueryKeys();
 
   const { mutate: updateIssuesBatch, isLoading: batchUpdating } = useMutation(
     api.issues.updateBatchIssues,
     {
-      // OPTIMISTIC UPDATE
       onMutate: async (newIssue) => {
-        // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
-        await queryClient.cancelQueries(["issues"]);
-        // Snapshot the previous value
-        const previousIssues = queryClient.getQueryData<IssueType[]>([
-          "issues",
-        ]);
+        await queryClient.cancelQueries(issuesKey);
+        const previousIssues = queryClient.getQueryData<IssueType[]>(issuesKey);
 
-        // Optimistically updating the issues
-        queryClient.setQueryData(["issues"], (old?: IssueType[]) => {
-          const newIssues = (old ?? []).map((issue) => {
+        queryClient.setQueryData(issuesKey, (old?: IssueType[]) => {
+          return (old ?? []).map((issue) => {
             const { ids, ...updatedProps } = newIssue;
             if (ids.includes(issue.id)) {
-              // Assign the new prop values to the issue
               return Object.assign(issue, updatedProps);
             }
             return issue;
           });
-          return newIssues;
         });
 
-        // Return a context object with the snapshotted value
-        return { previousIssues };
+        return { previousIssues, issuesKey };
       },
-      onError: (err: AxiosError, newIssue, context) => {
-        // If the mutation fails, use the context returned from onMutate to roll back
-        queryClient.setQueryData(["issues"], context?.previousIssues);
+      onError: (err: AxiosError, _newIssue, context) => {
+        if (context?.issuesKey) {
+          queryClient.setQueryData(context.issuesKey, context?.previousIssues);
+        }
 
         if (err?.response?.data == "Too many requests") {
           toast.error(TOO_MANY_REQUESTS);
@@ -50,10 +44,10 @@ const useUpdateIssuesBatch = () => {
           description: "Please try again later.",
         });
       },
-      onSettled: () => {
-        // Always refetch after error or success
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        queryClient.invalidateQueries(["issues"]);
+      onSettled: (_data, _err, _vars, context) => {
+        if (context?.issuesKey) {
+          void queryClient.invalidateQueries(context.issuesKey);
+        }
       },
     }
   );

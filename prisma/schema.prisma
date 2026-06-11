@@ -21,7 +21,6 @@
 //   CREATE SCHEMA business;
 //   CREATE SCHEMA agents;
 // ============================================================
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]

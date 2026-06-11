@@ -1,0 +1,31 @@
+# Build and run AgileAi frontend only
+#
+# Build & push to Docker Hub:
+#   docker compose build
+#   docker push YOUR_USERNAME/agileai-web:latest
+#
+# Run locally:
+#   copy .env.example .env  (set Clerk keys, DATABASE_URL, AGENTS_API_URL)
+#   docker compose up -d
+
+services:
+  agileai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    image: ${DOCKERHUB_USERNAME:-local}/agileai-web:${WEB_IMAGE_TAG:-latest}
+    container_name: agileai-web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      SKIP_ENV_VALIDATION: "1"
+      DATABASE_URL: ${DATABASE_URL}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      AGENTS_API_URL: ${AGENTS_API_URL:-http://host.docker.internal:8000}
+    restart: unless-stopped

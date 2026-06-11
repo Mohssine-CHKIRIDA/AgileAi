@@ -9,7 +9,7 @@ import {
   ModalTitle,
   ModalTrigger,
 } from "@/components/ui/modal";
-import { type Sprint } from "@prisma/client";
+import { type Sprint } from "@/utils/types";
 import { StartSprintForm } from "./form";
 
 const StartSprintModal: React.FC<{

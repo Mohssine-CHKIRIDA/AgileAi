@@ -1,5 +1,5 @@
 "use client";
-import { type Sprint } from "@prisma/client";
+import { type Sprint } from "@/utils/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { NameField } from "./fields/name";
@@ -36,10 +36,10 @@ const StartSprintForm: React.FC<{
   } = useForm<FormValues>({
     defaultValues: {
       name: sprint.name,
-      duration: (sprint.duration as FormValues["duration"]) ?? DEFAULT_DURATION,
+      duration: DEFAULT_DURATION,
       startDate: sprint.startDate ? new Date(sprint.startDate) : new Date(),
       endDate: sprint.endDate ? new Date(sprint.endDate) : new Date(),
-      description: sprint.description ?? "",
+      description: sprint.goal ?? "",
     },
   });
   const { updateSprint, isUpdating } = useSprints();
@@ -58,8 +58,7 @@ const StartSprintForm: React.FC<{
         sprintId: sprint.id,
         status: "ACTIVE",
         name: data.name,
-        duration: data.duration ?? DEFAULT_DURATION,
-        description: data.description,
+        goal: data.description,
         startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
       },

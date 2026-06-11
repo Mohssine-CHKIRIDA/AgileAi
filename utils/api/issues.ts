@@ -23,7 +23,7 @@ export const issuesRoutes = {
   getIssues: async ({ signal }: { signal?: AbortSignal }) => {
     const { data } = await axios.get<GetIssuesResponse>(
       `${baseUrl}/api/issues`,
-      { signal }
+      { signal, headers: getHeaders() }
     );
     return data?.issues;
   },
