@@ -1,56 +1,302 @@
-<h1 align="center">Agile AI </h1>
+<h1 align="center">🚀 AgileAI</h1>
 
-![Tech stack](./assets/readme/tech-stack.png)
+<p align="center">
+An AI-powered Agile Project Management Platform that automates Scrum workflows using a Multi-Agent Architecture.
+</p>
 
-![App screenshot](./assets/readme/backlog-screenshot.png)
+---
 
-## Features
+![Tech stack](./assets/readme/logos.png)
 
-- Written in modern React
-- Uses Next js 13.4 app directory structure
-- Explores basic React Server Components
-- Full user authentication lifecycle with Clerk
-- Rate limiting with upstash to avoid spamming
-- Modern data fetching using React-Query
-- Simple local React state management, without redux, mobx, or similar
-- Uses Radix UI library for unstyled components and Tailwind for styling
-- Uses Prisma ORM for database modeling
-- Entire app written with typescript
-- End to end type safety with Zod
+![App screenshot](./assets/readme/dash.png)
+![App screenshot](./assets/readme/task.png)
 
-## Setting up development environment
+## Overview
 
-- Project uses Prisma, you can decide which database to use. \*By default it uses the 'mysql' provider
-- Create an empty `.env` file inside the root dir `/`, copy `/.env.example` contents into it, and fill in the variables needed.
-- `npm install`
-- `npx prisma db seed`
-- Lookup 'USE THIS IF RUNNING LOCALLY' inside the project and follow the instructions.
-- `npm run dev`
-- App should now be running on `http://localhost:3000/`
+AgileAI is an intelligent project management platform designed to help software development teams adopt Agile and Scrum practices more efficiently.
 
-## What's Pending?
+Unlike traditional tools that require significant manual effort from Scrum Masters and project managers, AgileAI introduces autonomous AI agents capable of generating tasks, planning sprints, assigning work, managing workflows, and automating project operations.
 
-There are features pending from this showcase product which should exist in a real product:
+The platform combines a modern full-stack web application with a dedicated AI agent ecosystem powered by LangGraph and Groq LLMs.
 
-### Unit/Integration tests
+---
 
-Unit and integration tests are currently in progress... The app will be using [Vitest](https://vitest.dev/) and [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/).
+## Architecture
 
-### End to end tests
+The system is composed of two main layers:
 
-End to end tests are currently in progress as well... The app will be using [Cypress](https://www.cypress.io/).
+### Web Platform
+
+- Next.js 15
+- React
+- TypeScript
+- Tailwind CSS
+- Prisma ORM
+- PostgreSQL
+
+### AI Agent System
+
+- LangGraph
+- LangChain
+- Groq LLM
+- Multi-Agent Orchestration
+- State Persistence
+- Tool Calling
+
+---
+
+## Core Features
+
+### Project Management
+
+- Project creation and management
+- Sprint planning
+- Backlog management
+- Task tracking
+- Team management
+- Agile workflow monitoring
+
+### AI-Powered Automation
+
+#### Task Agent
+
+- Converts feature descriptions into structured Agile tasks
+- Generates acceptance criteria
+- Estimates story complexity
+
+#### Assignment Agent
+
+- Assigns tasks to team members
+- Balances workloads
+- Matches skills with requirements
+
+#### Planning Agent
+
+- Generates sprint plans
+- Prioritizes backlog items
+- Suggests sprint capacity allocation
+
+#### Workflow Agent
+
+- Monitors task progression
+- Detects bottlenecks
+- Recommends workflow improvements
+
+#### Automation & Integration Agent
+
+- Handles automated project actions
+- Integrates AI-driven workflows
+- Supports event-based automation
+
+#### Orchestrator Agent
+
+- Coordinates communication between agents
+- Routes requests to specialized agents
+- Maintains system-wide context
+
+---
+
+## Technology Stack
+
+### Frontend
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Radix UI
+
+### Backend
+
+- Next.js API Routes
+- Prisma ORM
+- PostgreSQL
+
+### AI Layer
+
+- LangGraph
+- LangChain
+- Groq
+
+### Database
+
+The platform uses a single PostgreSQL database with two schemas:
+
+- `business` → application data (users, projects, tasks, teams)
+- `agents` → AI memory, checkpoints, workflows, and execution states
+
+This architecture provides logical separation while maintaining operational simplicity.
+
+---
+
+## Database Structure
+
+### Business Schema
+
+Contains:
+
+- Users
+- Teams
+- Projects
+- Sprints
+- Tasks
+- Backlogs
+- Assignments
+
+### Agents Schema
+
+Contains:
+
+- Agent Checkpoints
+- Agent Memories
+- Workflow States
+- Execution Logs
+- AI Context Storage
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 15+
+- Python 3.11+
+- npm
+
+---
+
+### Clone Repository
+
+```bash
+git clone <repository-url>
+cd agileai
+```
+
+### Install Frontend Dependencies
+
+```bash
+npm install
+```
+
+### Install Agent Dependencies
+
+```bash
+cd Agents
+pip install -r requirements.txt
+```
+
+### Configure Environment
+
+Create a `.env` file:
+
+```env
+DATABASE_URL=
+GROQ_API_KEY=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### Create Database Schemas
+
+```sql
+CREATE SCHEMA business;
+CREATE SCHEMA agents;
+```
+
+### Generate Prisma Client
+
+```bash
+npx prisma db push
+npx prisma generate
+```
+
+### Start Next.js Application
+
+```bash
+npm run dev
+```
+
+Runs on:
+
+```text
+http://localhost:3000
+```
+
+### Start AI Agent Service
+
+```bash
+cd Agents
+python main.py
+```
+
+---
+
+## Testing
+
+### Frontend
+
+```bash
+npm run test
+```
+
+### Agents
+
+```bash
+pytest
+```
+
+---
+
+## Project Structure
+
+```text
+AgileAI/
+│
+├── app/                    # Next.js App Router
+├── components/             # UI Components
+├── lib/                    # Utilities
+├── prisma/                 # Prisma Schema
+│
+├── Agents/
+│   ├── task_agent/
+│   ├── assignment_agent/
+│   ├── planning_agent/
+│   ├── workflow_agent/
+│   ├── automation_agent/
+│   ├── orchestrator/
+│   └── persistence/
+│
+├── public/
+└── docs/
+```
+
+---
+
+## Future Enhancements
+
+- Jira Integration
+- GitHub Integration
+- Slack Integration
+- Predictive Sprint Analytics
+- AI Sprint Retrospectives
+- Advanced Reporting Dashboard
+- Multi-Project Optimization
+- Real-Time Team Performance Insights
+
+---
 
 ## Contributing
 
-Contributions to this project are welcome. Feel free to submit bug reports, feature requests, or pull requests to help improve the app.
+Contributions are welcome through:
 
-## Acknowledgements
+- Bug reports
+- Feature requests
+- Pull requests
 
-- Inspired by @oldboyxx's https://github.com/oldboyxx/jira_clone
-- App was initially bootstrapped with T3's [create-t3-app](https://create.t3.gg/)
+Please follow the project's coding standards and testing practices before submitting contributions.
+
+---
 
 ## License
 
-This project is licensed under the [MIT](https://opensource.org/licenses/MIT) license.
-
-<hr>
+This project is licensed under the MIT License.
